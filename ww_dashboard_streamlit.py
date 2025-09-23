@@ -1,22 +1,30 @@
 # ww_dashboard_streamlit.py
-# Versão integrada com suporte a múltiplos usuários (compartilha alimentos, dados restritos por usuário)
-# Mantive suas funções originais; adicionei apenas o necessário para autenticação e persistência por usuário.
-
 import streamlit as st
-import json
-import re
-import os
-import datetime
-import hashlib
+import json, re, os, datetime
 import plotly.graph_objects as go
 import pandas as pd
 from math import floor
 
-# -----------------------------
-# UTILITÁRIOS GERAIS
-# -----------------------------
-DATA_FILE = "ww_data.json"
+def rerun_streamlit():
+    try:
+        if callable(st.experimental_rerun):
+            st.experimental_rerun()
+        else:
+            st.stop()
+    except Exception:
+        st.stop()
 
+# -----------------------------
+# CONFIGURAÇÃO INICIAL
+# -----------------------------
+st.set_page_config(page_title="Vigilantes do Peso Brasil", layout="wide")
+
+DATA_FILE = "ww_data.json"
+USERS_FILE = "ww_users.json"
+
+# -----------------------------
+# UTILITÁRIOS
+# -----------------------------
 def safe_parse_porçao(value):
     if value is None:
         raise ValueError("Porção ausente")
@@ -41,37 +49,21 @@ def round_points(p):
         p = float(p)
     except Exception:
         return 0
-    # round half up
-    if p - int(p) < 0.5:
-        return int(p)
-    else:
-        return int(p) + 1
+    return int(p + 0.5)  # round half up
 
-def load_data():
-    """Carrega o JSON. Se for lista (antigo), converte para dict com 'alimentos'."""
-    if os.path.exists(DATA_FILE):
+def load_data(file_path):
+    if os.path.exists(file_path):
         try:
-            with open(DATA_FILE, "r", encoding="utf-8") as f:
+            with open(file_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
-            # Normalizar formato: lista antiga -> {'alimentos': [...], 'usuarios': {}}
-            if isinstance(data, list):
-                return {"alimentos": data, "usuarios": {}}
-            if isinstance(data, dict):
-                # garantir chaves
-                if "alimentos" not in data:
-                    data["alimentos"] = []
-                if "usuarios" not in data:
-                    data["usuarios"] = {}
-                return data
-            # fallback
-            return {"alimentos": [], "usuarios": {}}
+            return data
         except Exception:
-            return {"alimentos": [], "usuarios": {}}
-    return {"alimentos": [], "usuarios": {}}
+            return {}
+    return {}
 
-def save_data(data):
+def save_data(data, file_path):
     try:
-        with open(DATA_FILE, "w", encoding="utf-8") as f:
+        with open(file_path, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, default=str, indent=2)
     except Exception as e:
         st.error(f"Erro ao salvar dados: {e}")
@@ -84,72 +76,69 @@ def weekday_name_br(dt: datetime.date):
     return days[dt.weekday()]
 
 # -----------------------------
-# AUTENTICAÇÃO SIMPLES (hash de senha)
+# LOGIN / USUÁRIOS
 # -----------------------------
-def hash_senha(senha: str) -> str:
-    return hashlib.sha256(senha.encode("utf-8")).hexdigest()
+if "logged_in" not in st.session_state:
+    st.session_state.logged_in = False
+if "current_user" not in st.session_state:
+    st.session_state.current_user = ""
 
-def cadastrar_usuario(usuario: str, senha: str):
-    data = load_data()
-    if not usuario:
-        return False, "Nome de usuário vazio"
-    if "usuarios" not in data:
-        data["usuarios"] = {}
-    if usuario in data["usuarios"]:
-        return False, "Usuário já existe"
-    data["usuarios"][usuario] = {
-        "senha": hash_senha(senha),
-        "peso": [],
-        "datas_peso": [],
-        "consumo_diario": 0.0,
-        "meta_diaria": 29,
-        "extras": 36.0,
-        "consumo_historico": [],
-        "pontos_semana": []
-    }
-    save_data(data)
-    return True, "Usuário cadastrado com sucesso"
+users_store = load_data(USERS_FILE)
+if not isinstance(users_store, dict):
+    users_store = {}
 
-def login_usuario(usuario: str, senha: str):
-    data = load_data()
-    if "usuarios" not in data or usuario not in data["usuarios"]:
+def login_user(email, password):
+    if email in users_store and users_store[email]["password"] == password:
+        st.session_state.logged_in = True
+        st.session_state.current_user = email
+        st.success(f"Bem-vindo(a), {email}!")
+        return True
+    else:
+        st.error("Email ou senha incorretos.")
         return False
-    if data["usuarios"][usuario]["senha"] != hash_senha(senha):
+
+def register_user(email, password):
+    if email in users_store:
+        st.error("Usuário já existe!")
         return False
-    st.session_state.usuario_logado = usuario
+    users_store[email] = {"password": password}
+    save_data(users_store, USERS_FILE)
+    st.session_state.logged_in = True
+    st.session_state.current_user = email
+    st.success(f"Cadastro realizado com sucesso! Bem-vindo(a), {email}!")
     return True
 
-def logout_usuario():
-    if "usuario_logado" in st.session_state:
-        del st.session_state["usuario_logado"]
+# -----------------------------
+# INTERFACE DE LOGIN
+# -----------------------------
+if not st.session_state.logged_in:
+    st.title("🔒 Login - Vigilantes do Peso Brasil")
+    tab_login, tab_cadastro = st.tabs(["Login", "Cadastro"])
+
+    with tab_login:
+        email_login = st.text_input("Email", key="login_email")
+        senha_login = st.text_input("Senha", type="password", key="login_pass")
+        if st.button("Login"):
+            login_user(email_login.strip(), senha_login.strip())
+
+    with tab_cadastro:
+        email_cad = st.text_input("Email", key="cad_email")
+        senha_cad = st.text_input("Senha", type="password", key="cad_pass")
+        if st.button("Cadastrar"):
+            register_user(email_cad.strip(), senha_cad.strip())
+
+    st.stop()  # bloqueia acesso ao restante do app até logar
 
 # -----------------------------
-# RERUN COMPATÍVEL
+# A PARTIR DAQUI, APP PRINCIPAL
 # -----------------------------
-def rerun_streamlit():
-    """Tenta reiniciar o script de forma compatível com diferentes versões do Streamlit."""
-    try:
-        # Experimental rerun (padrão)
-        if hasattr(st, "experimental_rerun") and callable(st.experimental_rerun):
-            st.experimental_rerun()
-            return
-    except Exception:
-        pass
-    # fallback
-    try:
-        st.stop()
-    except Exception:
-        pass
+st.title(f"📊 Bem-vindo(a), {st.session_state.current_user}!")
+# aqui continua o seu dashboard normalmente
 
 # -----------------------------
-# CONFIGURAÇÃO INICIAL STREAMLIT
+# CARREGAR DADOS PERSISTIDOS
 # -----------------------------
-st.set_page_config(page_title="Vigilantes do Peso Brasil", layout="wide")
-
-# -----------------------------
-# CARREGAR DADOS PERSISTIDOS (GLOBAIS)
-# -----------------------------
-data_store = load_data()
+data_store = load_data(DATA_FILE)
 
 # -----------------------------
 # INICIALIZAÇÃO DO SESSION_STATE
@@ -157,132 +146,114 @@ data_store = load_data()
 if "menu" not in st.session_state:
     st.session_state.menu = "🏠 Dashboard"
 
-# garantir lista de alimentos global
 if "alimentos" not in st.session_state:
-    st.session_state.alimentos = data_store.get("alimentos", [])
+    if isinstance(data_store, list):
+        st.session_state.alimentos = data_store
+    elif isinstance(data_store, dict) and "alimentos" in data_store:
+        st.session_state.alimentos = data_store["alimentos"]
+    else:
+        st.session_state.alimentos = []
 
-# usuario logado: se já tiver em session, manter; senão, não carregar dados privados
-if "usuario_logado" not in st.session_state:
-    st.session_state.usuario_logado = None
+if isinstance(data_store, dict):  # só tenta .get se for dict
+    if "peso" not in st.session_state:
+        st.session_state.peso = data_store.get("peso", [])
 
-# se houver usuário logado, inicializar os dados do usuário na sessão
-def init_user_session(usuario):
-    # carrega data_store atualizado
-    global data_store
-    data_store = load_data()
-    users = data_store.get("usuarios", {})
-    ud = users.get(usuario, None)
-    if ud is None:
-        # criar estrutura básica se não existir
-        data_store.setdefault("usuarios", {})
-        data_store["usuarios"].setdefault(usuario, {
-            "senha": "",
-            "peso": [],
-            "datas_peso": [],
-            "consumo_diario": 0.0,
-            "meta_diaria": 29,
-            "extras": 36.0,
-            "consumo_historico": [],
-            "pontos_semana": []
-        })
-        save_data(data_store)
-        ud = data_store["usuarios"][usuario]
+    if "datas_peso" not in st.session_state:
+        ds = data_store.get("datas_peso", [])
+        st.session_state.datas_peso = [datetime.date.fromisoformat(d) for d in ds] if ds else []
 
-    # carregar no session_state (dados do usuário)
-    st.session_state.peso = ud.get("peso", [])
-    st.session_state.datas_peso = [datetime.date.fromisoformat(d) for d in ud.get("datas_peso", [])] if ud.get("datas_peso") else []
-    st.session_state.consumo_diario = float(ud.get("consumo_diario", 0.0))
-    st.session_state.meta_diaria = ud.get("meta_diaria", 29)
-    st.session_state.extras = float(ud.get("extras", 36.0))
-    # historico e pontos semanais já em objetos (datas podem ser isoformat strings)
-    ch = ud.get("consumo_historico", [])
-    # converter datas se necessário
-    for r in ch:
-        if isinstance(r.get("data"), str):
-            try:
-                r["data"] = datetime.date.fromisoformat(r["data"])
-            except Exception:
-                pass
-    st.session_state.consumo_historico = ch
+    if "consumo_diario" not in st.session_state:
+        st.session_state.consumo_diario = float(data_store.get("consumo_diario", 0.0))
 
-    ps = ud.get("pontos_semana", [])
-    for w in ps:
-        for reg in w.get("pontos", []):
-            if isinstance(reg.get("data"), str):
+    if "meta_diaria" not in st.session_state:
+        st.session_state.meta_diaria = data_store.get("meta_diaria", 29)
+
+    if "extras" not in st.session_state:
+        st.session_state.extras = float(data_store.get("extras", 36.0))
+
+    if "consumo_historico" not in st.session_state:
+        ch = data_store.get("consumo_historico", [])
+        for r in ch:
+            if isinstance(r.get("data"), str):
                 try:
-                    reg["data"] = datetime.date.fromisoformat(reg["data"])
+                    r["data"] = datetime.date.fromisoformat(r["data"])
                 except Exception:
                     pass
-    st.session_state.pontos_semana = ps
+        st.session_state.consumo_historico = ch
 
-    # alimentos unificados (garantir)
-    st.session_state.alimentos = data_store.get("alimentos", [])
+    if "pontos_semana" not in st.session_state:
+        ps = data_store.get("pontos_semana", [])
+        for w in ps:
+            for reg in w.get("pontos", []):
+                if isinstance(reg.get("data"), str):
+                    try:
+                        reg["data"] = datetime.date.fromisoformat(reg["data"])
+                    except Exception:
+                        pass
+        st.session_state.pontos_semana = ps
+else:
+    # caso data_store seja lista, inicializa os demais vazios
+    if "peso" not in st.session_state:
+        st.session_state.peso = []
+    if "datas_peso" not in st.session_state:
+        st.session_state.datas_peso = []
+    if "consumo_diario" not in st.session_state:
+        st.session_state.consumo_diario = 0.0
+    if "meta_diaria" not in st.session_state:
+        st.session_state.meta_diaria = 29
+    if "extras" not in st.session_state:
+        st.session_state.extras = 36.0
+    if "consumo_historico" not in st.session_state:
+        st.session_state.consumo_historico = []
+    if "pontos_semana" not in st.session_state:
+        st.session_state.pontos_semana = []
 
-# persist_all -> agora salva dados do usuário + alimentos
+# -----------------------------
+# PERSISTÊNCIA
+# -----------------------------
 def persist_all():
-    """
-    Persiste os dados em ww_data.json.
-    Salva:
-      - alimentos (unificados)
-      - dados do usuário logado (peso, históricos, pontos_semana, etc.)
-    """
-    data = load_data()  # começa com formato normalizado
-    # atualizar alimentos
-    data["alimentos"] = st.session_state.alimentos
-
-    usuario = st.session_state.get("usuario_logado", None)
-    if usuario:
-        data.setdefault("usuarios", {})
-        # converter datas_peso para isoformat
-        ds_peso_iso = [d.isoformat() for d in st.session_state.datas_peso]
-        # converter consumo_historico datas
-        ch_serial = []
-        for r in st.session_state.consumo_historico:
-            ch_serial.append({
-                "data": r["data"].isoformat() if isinstance(r.get("data"), datetime.date) else str(r.get("data")),
-                "nome": r["nome"],
-                "quantidade": r["quantidade"],
-                "pontos": r["pontos"],
-                "usou_extras": r.get("usou_extras", 0.0)
-            })
-        ps_serial = []
-        for w in st.session_state.pontos_semana:
-            ps_serial.append({
-                "semana": w.get("semana"),
-                "pontos": [
-                    {
-                        "data": p["data"].isoformat() if isinstance(p.get("data"), datetime.date) else str(p.get("data")),
-                        "nome": p["nome"],
-                        "quantidade": p["quantidade"],
-                        "pontos": p["pontos"],
-                        "usou_extras": p.get("usou_extras", 0.0)
-                    } for p in w.get("pontos", [])
-                ],
-                "extras": w.get("extras", 36.0)
-            })
-        # se usuário existir em data, preservamos a senha
-        senha_hash = data.get("usuarios", {}).get(usuario, {}).get("senha", "")
-        data["usuarios"][usuario] = {
-            "senha": senha_hash,
+    try:
+        ds = {
+            "alimentos": st.session_state.alimentos,
             "peso": st.session_state.peso,
-            "datas_peso": ds_peso_iso,
+            "datas_peso": [d.isoformat() for d in st.session_state.datas_peso],
             "consumo_diario": float(st.session_state.consumo_diario),
             "meta_diaria": st.session_state.meta_diaria,
             "extras": float(st.session_state.extras),
-            "consumo_historico": ch_serial,
-            "pontos_semana": ps_serial
+            "consumo_historico": [
+                {
+                    "data": r["data"].isoformat() if isinstance(r.get("data"), datetime.date) else str(r.get("data")),
+                    "nome": r["nome"],
+                    "quantidade": r["quantidade"],
+                    "pontos": r["pontos"],
+                    "usou_extras": r.get("usou_extras", 0.0)
+                }
+                for r in st.session_state.consumo_historico
+            ],
+            "pontos_semana": [
+                {
+                    "semana": w["semana"],
+                    "pontos": [
+                        {
+                            "data": p["data"].isoformat() if isinstance(p.get("data"), datetime.date) else str(p.get("data")),
+                            "nome": p["nome"],
+                            "quantidade": p["quantidade"],
+                            "pontos": p["pontos"],
+                            "usou_extras": p.get("usou_extras", 0.0)
+                        } for p in w.get("pontos", [])
+                    ],
+                    "extras": w.get("extras", 36.0)
+                } for w in st.session_state.pontos_semana
+            ]
         }
-    # salvar
-    save_data(data)
+        save_data(ds)
+    except Exception as e:
+        st.error(f"Erro ao persistir dados: {e}")
 
 # -----------------------------
-# FUNÇÕES DE RECONSTRUÇÃO / RESET, iguais às suas mas adaptadas ao per-user
+# FUNÇÃO RESET HISTÓRICO
 # -----------------------------
 def reset_historico():
-    """Zera histórico do usuário logado (peso, consumo, pontos)."""
-    if not st.session_state.get("usuario_logado"):
-        st.warning("Nenhum usuário logado para resetar histórico.")
-        return
     st.session_state.peso = []
     st.session_state.datas_peso = []
     st.session_state.consumo_historico = []
@@ -292,6 +263,9 @@ def reset_historico():
     persist_all()
     st.success("Histórico de peso e pontos zerado com sucesso!")
 
+# -----------------------------
+# GARANTIR SEMANA ATUAL
+# -----------------------------
 def ensure_current_week_exists():
     hoje = datetime.date.today()
     week = iso_week_number(hoje)
@@ -300,6 +274,11 @@ def ensure_current_week_exists():
         st.session_state.extras = 36.0
         persist_all()
 
+ensure_current_week_exists()
+
+# -----------------------------
+# RECONSTRUÇÃO E RECÁLCULO (EXTRAS / DIÁRIO)
+# -----------------------------
 def rebuild_pontos_semana_from_history():
     meta = float(st.session_state.meta_diaria or 29.0)
     weeks = {}
@@ -356,52 +335,6 @@ def rebuild_pontos_semana_from_history():
     st.session_state.extras = st.session_state.pontos_semana[-1]["extras"] if st.session_state.pontos_semana else 36.0
     persist_all()
 
-# -----------------------------
-# UI: LOGIN / CADASTRO (antes do menu)
-# -----------------------------
-if not st.session_state.get("usuario_logado"):
-    st.sidebar.title("🔐 Autenticação")
-    
-    # --- LOGIN ---
-    st.header("🔐 Login")
-    usuario_input = st.text_input("Usuário", key="ui_user")
-    senha_input = st.text_input("Senha", type="password", key="ui_pass")
-    if st.button("Entrar", key="btn_login"):
-        ok = login_usuario(usuario_input.strip(), senha_input or "")
-        if ok:
-            st.success(f"Bem-vindo(a), {usuario_input}!")
-            init_user_session(usuario_input.strip())
-            st.session_state.usuario_logado = True  # <- manter consistente
-            st.session_state.usuario_atual = usuario_input.strip()
-            rerun_streamlit()
-        else:
-            st.error("Usuário ou senha incorretos")
-
-    st.markdown("---")
-
-    # --- CADASTRO ---
-    st.subheader("➕ Cadastrar novo usuário")
-    novo_usuario = st.text_input("Novo usuário", key="ui_new_user")
-    nova_senha = st.text_input("Senha", type="password", key="ui_new_pass")
-    if st.button("Cadastrar", key="btn_cad"):
-        ok, msg = cadastrar_usuario(novo_usuario.strip(), nova_senha or "")
-        if ok:
-            st.success(msg + " — faça login agora.")
-        else:
-            st.error(msg)
-
-    # NÃO use mais st.stop()
-    # st.stop()  <-- remover
-
-# --- MENU PRINCIPAL ---
-if st.session_state.get("usuario_logado"):
-    menu_main = ["Registrar Peso", "Registrar Alimento", "Histórico", "Gráficos", "Exportar Dados"]
-    escolha = st.selectbox("Menu Principal", menu_main)
-
-    if escolha == "Registrar Peso":
-        ...
-    elif escolha == "Registrar Alimento":
-        ...
 
 # -----------------------------
 # NAVEGAÇÃO (botões laterais)
@@ -409,84 +342,62 @@ if st.session_state.get("usuario_logado"):
 st.sidebar.title("📋 Menu")
 
 menu_itens = [
-    ("🏠 Dashboard", "dashboard"),
-    ("🍴 Registrar Consumo", "consumo"),
-    ("⚖️ Registrar Peso", "peso"),
-    ("📂 Importar Alimentos", "importar"),
-    ("➕ Cadastrar Alimento", "cadastrar"),
-    ("🔍 Consultar Alimento", "consultar"),
+    ("🏠 Dashboard", "🏠 Dashboard"),
+    ("🍴 Registrar Consumo", "🍴 Registrar consumo"),
+    ("⚖️ Registrar Peso", "⚖️ Registrar peso"),
+    ("📂 Importar Alimentos", "📂 Importar planilha de alimentos"),
+    ("➕ Cadastrar Alimento", "➕ Cadastrar novo alimento"),
+    ("🔍 Consultar Alimento", "🔍 Consultar alimento"),
     ("🔄 Resetar Semana", "resetar_semana"),
-    ("🚪 Sair", "sair"),
+    ("🚪 Sair", "🚪 Sair"),
 ]
 
-# Inicializa menu se não existir
-if "menu" not in st.session_state:
-    st.session_state.menu = "dashboard"
-
-# Botões laterais
 for label, key in menu_itens:
-    if st.sidebar.button(label, key=f"sidebtn_{key}", use_container_width=True):
+    if st.sidebar.button(label, key=f"sidebtn_{label}", use_container_width=True):
         st.session_state.menu = key
-        # força refresh simples
-        rerun_streamlit()
+
+        # -----------------------------
+        # AÇÃO RESETAR SEMANA
+        # -----------------------------
+        if key == "resetar_semana":
+            hoje = datetime.date.today()
+            semana_atual = hoje.isocalendar()[1]
+
+            # Zerar pontos da semana atual
+            if "pontos_semana" in st.session_state:
+                st.session_state.pontos_semana = [
+                    w for w in st.session_state.pontos_semana if w.get("semana") != semana_atual
+                ]
+            else:
+                st.session_state.pontos_semana = []
+
+            # Cria nova semana zerada
+            st.session_state.pontos_semana.append({
+                "semana": semana_atual,
+                "pontos": [],
+                "extras": 36.0
+            })
+
+            # Zera consumo diário e extras
+            st.session_state.extras = 36.0
+            st.session_state.consumo_diario = 0.0
+
+            # Remove registros da semana atual do histórico
+            if "consumo_historico" in st.session_state:
+                st.session_state.consumo_historico = [
+                    r for r in st.session_state.consumo_historico
+                    if r.get("data").isocalendar()[1] != semana_atual
+                ]
+
+            # Persistir alterações se houver função definida
+            if "persist_all" in globals():
+                persist_all()
+
+            # Mensagem de sucesso
+            st.sidebar.success(f"✅ Semana {semana_atual} resetada com sucesso!")
 
 # -----------------------------
-# CARREGAR DADOS (variáveis locais para facilitar)
-# -----------------------------
-data = load_data()  # data global
-usuario_atual = st.session_state.get("usuario_logado")
-
-# -----------------------------
-# AÇÃO: RESETAR SEMANA (apenas quando escolha no menu)
-# -----------------------------
-if st.session_state.menu == "resetar_semana":
-    # ação: zera apenas os dados do usuário atual (conforme pedido)
-    hoje = datetime.date.today()
-    semana_atual = hoje.isocalendar()[1]
-
-    # Zerar pontos da semana atual
-    if "pontos_semana" in st.session_state:
-        st.session_state.pontos_semana = [w for w in st.session_state.pontos_semana if w.get("semana") != semana_atual]
-    else:
-        st.session_state.pontos_semana = []
-
-    # Adiciona semana vazia atual
-    st.session_state.pontos_semana.append({
-        "semana": semana_atual,
-        "pontos": [],
-        "extras": 36.0
-    })
-
-    # Zerar consumo diário e extras do usuário
-    st.session_state.extras = 36.0
-    st.session_state.consumo_diario = 0.0
-
-    # Remove registros da semana atual do histórico do usuário
-    if "consumo_historico" in st.session_state:
-        # proteger caso datas sejam strings
-        novo_hist = []
-        for r in st.session_state.consumo_historico:
-            d = r.get("data")
-            if isinstance(d, str):
-                try:
-                    d = datetime.date.fromisoformat(d)
-                except Exception:
-                    # se não for parseable, manter (ou remover?) -> manter por segurança
-                    novo_hist.append(r)
-                    continue
-            if iso_week_number(d) != semana_atual:
-                novo_hist.append(r)
-        st.session_state.consumo_historico = novo_hist
-
-    # persistir
-    persist_all()
-    st.success(f"✅ Semana {semana_atual} resetada com sucesso para {usuario_atual}!")
-    # voltar para dashboard
-    st.session_state.menu = "dashboard"
-    rerun_streamlit()
-
-# -----------------------------
-# FUNÇÕES PRINCIPAIS (importar, cadastrar, registrar consumo e peso)
+# FUNÇÕES PRINCIPAIS
 # -----------------------------
 def importar_planilha():
     st.header("📂 Importar Alimentos")
@@ -497,6 +408,7 @@ def importar_planilha():
                 df = pd.read_csv(uploaded_file)
             else:
                 df = pd.read_excel(uploaded_file)
+            # tentar normalizar e mapear colunas
             alimentos_novos = []
             for _, row in df.iterrows():
                 try:
@@ -537,15 +449,9 @@ def importar_planilha():
                     alimentos_novos.append(alimento)
                 except Exception:
                     continue
-            # adicionar sem duplicatas por nome (mantendo existente)
-            nomes_exist = {a["Nome"] for a in st.session_state.alimentos}
-            adicionados = 0
-            for a in alimentos_novos:
-                if a["Nome"] not in nomes_exist:
-                    st.session_state.alimentos.append(a)
-                    adicionados += 1
+            st.session_state.alimentos.extend(alimentos_novos)
             persist_all()
-            st.success(f"📂 Importadas {adicionados} linhas novas. Total agora: {len(st.session_state.alimentos)} alimentos.")
+            st.success(f"📂 Importadas {len(alimentos_novos)} linhas. Total agora: {len(st.session_state.alimentos)} alimentos.")
         except Exception as e:
             st.error(f"Erro ao importar planilha: {e}\n(Se for .xlsx, instale openpyxl: pip install openpyxl)")
 
@@ -573,11 +479,6 @@ def cadastrar_alimento():
             return
         pontos_raw = (calorias / 50.0) + (carbo / 10.0) + (gordura / 5.0) + (proteina / 5.0) + (sodio_mg / 100.0)
         pontos = round_points(pontos_raw)
-        # evitar duplicatas por nome
-        nomes_exist = {a["Nome"] for a in st.session_state.alimentos}
-        if nome in nomes_exist:
-            st.error("Alimento com esse nome já existe.")
-            return
         alimento = {
             "Nome": nome,
             "Porcao": porcao,
@@ -620,6 +521,7 @@ def registrar_consumo():
         quantidade = st.number_input(f"Quantidade consumida em gramas (porção {porcao_ref} g):", min_value=0.0, step=1.0, format="%.2f", key="reg_quant")
         submitted = st.form_submit_button("Registrar consumo")
         if submitted:
+            # calcular pontos proporcionalmente (usar porção numérica)
             try:
                 porcao_val = float(porcao_ref)
             except Exception:
@@ -629,14 +531,22 @@ def registrar_consumo():
             pontos_registrados_raw = float(alimento.get("Pontos", 0.0)) * (quantidade / porcao_val if porcao_val > 0 else 0.0)
             pontos_registrados = round_points(pontos_registrados_raw)
 
+            # preparar registro
             registro = {"data": datetime.date.today(), "nome": escolha, "quantidade": float(quantidade), "pontos": pontos_registrados, "usou_extras": 0.0}
             st.session_state.consumo_historico.append(registro)
 
+            # rebuild whole weeks/historico/extras from history (ensures consistent rules)
             rebuild_pontos_semana_from_history()
+
             persist_all()
 
             st.success(f"🍴 Registrado {quantidade:.2f}g de {escolha}. Pontos: {pontos_registrados:.2f}. Total hoje: {st.session_state.consumo_diario:.2f}")
-            rerun_streamlit()
+
+            # refresh to update dashboards/graphs immediately
+            if hasattr(st, "experimental_rerun"):
+                rerun_streamlit()
+            else:
+                st.stop()
 
     # Histórico com opções de editar/excluir
     st.markdown("### Histórico de Consumo (últimos registros)")
@@ -646,9 +556,9 @@ def registrar_consumo():
         # mostrar em ordem reversa (mais recente primeiro)
         for idx in range(len(st.session_state.consumo_historico) - 1, -1, -1):
             reg = st.session_state.consumo_historico[idx]
-            data_r = reg["data"]
-            dia_sem = weekday_name_br(data_r) if isinstance(data_r, datetime.date) else ""
-            display = f"{data_r.strftime('%d/%m/%Y')} ({dia_sem}): {reg['nome']} — {reg['quantidade']:.2f} g — {reg['pontos']:.2f} pts"
+            data = reg["data"]
+            dia_sem = weekday_name_br(data) if isinstance(data, datetime.date) else ""
+            display = f"{data.strftime('%d/%m/%Y')} ({dia_sem}): {reg['nome']} — {reg['quantidade']:.2f} g — {reg['pontos']:.2f} pts"
             if reg.get("usou_extras", 0.0):
                 display += f" — usou extras: {reg.get('usou_extras',0.0):.2f} pts"
             cols = st.columns([6, 1, 1])
@@ -656,10 +566,12 @@ def registrar_consumo():
 
             # editar
             if cols[1].button("Editar", key=f"edit_cons_{idx}"):
+                # abrir painel de edição inline (expander)
                 edit_key_q = f"edit_q_{idx}"
                 save_key = f"save_cons_{idx}"
                 with st.expander(f"Editar registro #{idx}", expanded=True):
                     new_q = st.number_input("Quantidade (g):", min_value=0.0, step=1.0, value=reg["quantidade"], key=edit_key_q)
+                    # recalcular pontos
                     alimento_ref = next((a for a in st.session_state.alimentos if a["Nome"] == reg["nome"]), None)
                     if alimento_ref:
                         porc_ref = float(alimento_ref.get("Porcao", 100.0))
@@ -668,22 +580,32 @@ def registrar_consumo():
                     else:
                         new_p = reg["pontos"]
                     if st.button("Salvar alterações", key=save_key):
+                        # atualizar registro
                         reg["quantidade"] = float(new_q)
                         reg["pontos"] = new_p
+                        # rebuild para recalcular extras/diário corretamente
                         rebuild_pontos_semana_from_history()
                         persist_all()
-                        rerun_streamlit()
+                        if hasattr(st, "experimental_rerun"):
+                            rerun_streamlit()
+                        else:
+                            st.stop()
 
             # excluir
             if cols[2].button("Excluir", key=f"del_cons_{idx}"):
-                st.session_state.consumo_historico.pop(idx)
+                removed = st.session_state.consumo_historico.pop(idx)
+                # rebuild para recalcular extras/diário corretamente
                 rebuild_pontos_semana_from_history()
                 persist_all()
                 st.success("Registro excluído.")
-                rerun_streamlit()
+                if hasattr(st, "experimental_rerun"):
+                    rerun_streamlit()
+                else:
+                    st.stop()
 
 def registrar_peso():
     st.header("⚖️ Registrar Peso")
+    # usar form para permitir Enter
     with st.form("form_peso"):
         peso_novo = st.number_input("Informe seu peso (kg):", min_value=0.0, step=0.1, format="%.2f", key="input_peso_reg")
         submitted = st.form_submit_button("Registrar peso")
@@ -692,36 +614,136 @@ def registrar_peso():
             st.session_state.datas_peso.append(datetime.date.today())
             persist_all()
             st.success(f"Peso {peso_novo:.2f} kg registrado com sucesso!")
-            rerun_streamlit()
+            if hasattr(st, "experimental_rerun"):
+                rerun_streamlit()
+            else:
+                st.stop()
 
 # -----------------------------
-# FUNÇÕES AUXILIARES (de exibição/consulta)
+# Funções utilitárias
 # -----------------------------
-def round_points_util(value):
+import streamlit as st
+import json
+import re
+from math import floor
+
+DATA_FILE = "ww_data.json"
+
+def round_points(value):
+    """Arredondamento padrão (round half up)."""
     return floor(value + 0.5)
 
+def safe_parse_porçao(porc):
+    """Converte entrada de porção para float (remove 'g', etc)."""
+    try:
+        return float(re.sub("[^0-9.]", "", str(porc)))
+    except:
+        return 100.0
+
+def persist_all():
+    """Salva alimentos no JSON."""
+    with open(DATA_FILE, "w") as f:
+        json.dump(st.session_state.alimentos, f, indent=4)
+
+# -----------------------------
+# Inicialização da sessão
+# -----------------------------
+if "alimentos" not in st.session_state:
+    try:
+        with open(DATA_FILE, "r") as f:
+            data_store = json.load(f)
+            if isinstance(data_store, list):
+                st.session_state.alimentos = data_store
+            elif isinstance(data_store, dict) and "alimentos" in data_store:
+                st.session_state.alimentos = data_store["alimentos"]
+            else:
+                st.session_state.alimentos = []
+    except FileNotFoundError:
+        st.session_state.alimentos = []
+
+# -----------------------------
+# Função de cadastro
+# -----------------------------
+def cadastrar_alimento():
+    st.header("➕ Cadastrar Alimento")
+    nome = st.text_input("Nome do alimento:", key="cad_nome")
+    porcao_in = st.text_input("Porção (g):", key="cad_porc")
+    calorias = st.number_input("Calorias (kcal)", min_value=0.0, step=0.1, key="cad_cal")
+    carbo = st.number_input("Carboidratos (g)", min_value=0.0, step=0.1, key="cad_car")
+    gordura = st.number_input("Gordura (g)", min_value=0.0, step=0.1, key="cad_gor")
+    saturada = st.number_input("Gordura Saturada (g)", min_value=0.0, step=0.1, key="cad_sat")
+    fibra = st.number_input("Fibra (g)", min_value=0.0, step=0.1, key="cad_fib")
+    acucar = st.number_input("Açúcar (g)", min_value=0.0, step=0.1, key="cad_acu")
+    proteina = st.number_input("Proteína (g)", min_value=0.0, step=0.1, key="cad_pro")
+    sodio_mg = st.number_input("Sódio (mg)", min_value=0.0, step=1.0, key="cad_sod")
+
+    if st.button("Cadastrar alimento", key="bot_cad_alim"):
+        if not nome:
+            st.error("Informe o nome do alimento!")
+            return
+        porcao = safe_parse_porçao(porcao_in)
+
+        pontos_raw = (calorias / 50.0) + (carbo / 10.0) + (gordura / 5.0) + (proteina / 5.0) + (sodio_mg / 100.0)
+        pontos = round_points(pontos_raw)
+
+        alimento = {
+            "Nome": nome,
+            "Porcao": porcao,
+            "Calorias": round(calorias, 2),
+            "Gordura": round(gordura, 2),
+            "Saturada": round(saturada, 2),
+            "Carbo": round(carbo, 2),
+            "Fibra": round(fibra, 2),
+            "Açúcar": round(acucar, 2),
+            "Proteina": round(proteina, 2),
+            "Sodio_mg": round(sodio_mg, 2),
+            "Pontos": pontos
+        }
+        st.session_state.alimentos.append(alimento)
+        persist_all()
+        st.success(f"Alimento '{nome}' cadastrado com sucesso! Pontos: {pontos}")
+
+# -----------------------------
+# FUNÇÃO PARA CALCULAR PONTOS
+# -----------------------------
 def calcular_pontos(alimento):
+    """
+    Calcula pontos no estilo WW usando arredondamento half-up.
+    Fórmula adaptada (pode ajustar se já tiver a sua oficial).
+    """
     cal = alimento.get("Calorias", 0)
     gord = alimento.get("Gordura", 0)
     sat = alimento.get("Saturada", 0)
     acucar = alimento.get("Açúcar", 0)
     prot = alimento.get("Proteina", 0)
     fibra = alimento.get("Fibra", 0)
+
     pontos = (cal / 33) + (gord / 9) + (sat / 4) + (acucar / 9) - (prot / 10) - (fibra / 12)
     return round_points(pontos)
 
+
+# -----------------------------
+# CONSULTAR + EDITAR/EXCLUIR ALIMENTO
+# -----------------------------
 def consultar_alimento():
     st.header("🔍 Consultar Alimento")
+
     if not st.session_state.alimentos:
         st.warning("Nenhum alimento cadastrado ainda.")
         return
+
+    # lista de nomes e escolha
     nomes = [a["Nome"] for a in st.session_state.alimentos]
     escolha = st.selectbox("Escolha o alimento:", nomes, key="consult_select")
+
+    # localizar índice e objeto
     idx = next((i for i, a in enumerate(st.session_state.alimentos) if a["Nome"] == escolha), None)
     if idx is None:
         st.error("Alimento não encontrado.")
         return
     alimento = st.session_state.alimentos[idx]
+
+    # ----- Exibição (mantendo design original) -----
     st.subheader(alimento["Nome"])
     st.markdown(f"**Porção:** {alimento.get('Porcao', 0)} g")
     col1, col2, col3 = st.columns(3)
@@ -756,6 +778,8 @@ def consultar_alimento():
                     st.button(f"**{valor}**", key=f"{alimento['Nome']}_{comp}_{j}", disabled=True, use_container_width=True)
 
     st.markdown("---")
+
+    # ----- Botões lado a lado (Editar / Excluir) -----
     col_edit, col_delete = st.columns([1, 1])
     with col_edit:
         if st.button("✏️ Editar este alimento", key=f"edit_btn_{idx}"):
@@ -767,15 +791,20 @@ def consultar_alimento():
             st.success(f"Alimento '{escolha}' removido com sucesso!")
             rerun_streamlit()
 
+    # ----- Painel de edição (abre só se a flag estiver True) -----
     flag_key = f"edit_open_{idx}"
     if st.session_state.get(flag_key, False):
         st.markdown("---")
         st.subheader(f"Editar '{alimento['Nome']}'")
+
+        # Botão Cancelar fora do formulário
         col_cancel, _ = st.columns([1, 3])
         with col_cancel:
             if st.button("✖️ Cancelar edição", key=f"cancel_edit_{idx}"):
                 st.session_state[flag_key] = False
                 rerun_streamlit()
+
+        # Formulário de edição
         form_key = f"form_edit_{idx}"
         with st.form(form_key, clear_on_submit=False):
             nome_novo = st.text_input("Nome do alimento:", value=alimento.get("Nome", ""), key=f"edit_name_{idx}")
@@ -788,9 +817,12 @@ def consultar_alimento():
             acucar_novo = st.number_input("Açúcar (g):", min_value=0.0, value=float(alimento.get("Açúcar", 0.0)), step=0.1, key=f"edit_acu_{idx}")
             proteina_novo = st.number_input("Proteína (g):", min_value=0.0, value=float(alimento.get("Proteina", 0.0)), step=0.1, key=f"edit_pro_{idx}")
             sodio_novo = st.number_input("Sódio (mg):", min_value=0.0, value=float(alimento.get("Sodio_mg", 0.0)), step=1.0, key=f"edit_sod_{idx}")
+
             salvar = st.form_submit_button("💾 Salvar alterações")
             if salvar:
                 porcao_val = safe_parse_porçao(porcao_novo)
+
+                # Atualiza o alimento com os novos valores antes de recalcular pontos
                 alimento.update({
                     "Nome": nome_novo,
                     "Porcao": porcao_val,
@@ -803,42 +835,40 @@ def consultar_alimento():
                     "Proteina": round(proteina_novo, 2),
                     "Sodio_mg": round(sodio_novo, 2)
                 })
+
+                # Recalcula os pontos usando a função oficial
                 alimento["Pontos"] = calcular_pontos(alimento)
+
                 persist_all()
                 st.session_state[flag_key] = False
                 st.success(f"Alimento '{nome_novo}' atualizado com sucesso! Pontos: {alimento['Pontos']}")
                 rerun_streamlit()
 
+
 # -----------------------------
 # DASHBOARD PRINCIPAL
 # -----------------------------
-if st.session_state.menu == "dashboard":
+if st.session_state.menu == "🏠 Dashboard":
     st.markdown("<h1 style='text-align: center; color: #2c3e50;'>🍏 Vigilantes do Peso Brasil</h1>", unsafe_allow_html=True)
 
-    # Solicitar peso inicial se não houver
+    # solicitar peso inicial se não houver
     if not st.session_state.peso:
         st.warning("⚖️ Por favor, registre seu peso inicial antes de usar o dashboard.")
         registrar_peso()
         st.stop()
 
-    # Recalcular/exibir
+    # garantir semana atual e recalcular a partir do histórico (garante gráficos consistentes)
     ensure_current_week_exists()
     rebuild_pontos_semana_from_history()
 
-    peso_atual = st.session_state.peso[-1] if st.session_state.peso else None
+    peso_atual = st.session_state.peso[-1]
 
     semana_atual = iso_week_number(datetime.date.today())
-    semana_obj = next((w for w in st.session_state.pontos_semana if w.get("semana") == semana_atual), {"extras": 36.0})
-
-    consumo_diario = st.session_state.consumo_diario if st.session_state.consumo_diario is not None else 0.0
-    meta_diaria = st.session_state.meta_diaria if st.session_state.meta_diaria is not None else 29
-    extras_semana = semana_obj.get("extras", 36.0)
-
-    peso_text = f"{peso_atual:.2f} kg" if peso_atual is not None else "-"
+    semana_obj = next((w for w in st.session_state.pontos_semana if w["semana"] == semana_atual), {"extras": 36.0})
 
     st.markdown(
         f"<div style='background-color:#dff9fb;padding:15px;border-radius:10px;text-align:center;font-size:22px;'>"
-        f"<b>Pontos consumidos hoje: {consumo_diario:.2f} / {meta_diaria} | Extras disponíveis (semana): {extras_semana:.2f} | Peso atual: {peso_text}</b>"
+        f"<b>Pontos consumidos hoje: {st.session_state.consumo_diario:.2f} / {st.session_state.meta_diaria} | Extras disponíveis (semana): {semana_obj.get('extras', 36.0):.2f} | Peso atual: {peso_atual:.2f} kg</b>"
         f"</div>", unsafe_allow_html=True)
 
     # GRÁFICOS COLORIDOS
@@ -848,19 +878,19 @@ if st.session_state.menu == "dashboard":
         st.markdown("### 🍽️ Consumo Diário")
         fig1 = go.Figure(go.Indicator(
             mode="gauge+number",
-            value=float(consumo_diario),
-            gauge={'axis': {'range': [0, meta_diaria]},
+            value=float(st.session_state.consumo_diario),
+            gauge={'axis': {'range': [0, st.session_state.meta_diaria]},
                    'bar': {'color': "#e74c3c"},
                    'steps': [
-                       {'range': [0, meta_diaria * 0.7], 'color': "#2ecc71"},
-                       {'range': [meta_diaria * 0.7, meta_diaria], 'color': "#f1c40f"}
+                       {'range': [0, st.session_state.meta_diaria * 0.7], 'color': "#2ecc71"},
+                       {'range': [st.session_state.meta_diaria * 0.7, st.session_state.meta_diaria], 'color': "#f1c40f"}
                    ]},
             title={'text': "Pontos Consumidos"}))
         st.plotly_chart(fig1, use_container_width=True)
 
     with col2:
         st.markdown("### ⭐ Pontos Extras (semana)")
-        extras_val = float(extras_semana)
+        extras_val = float(semana_obj.get("extras", 36.0))
         fig2 = go.Figure(go.Indicator(
             mode="gauge+number",
             value=extras_val,
@@ -876,33 +906,26 @@ if st.session_state.menu == "dashboard":
 
     with col3:
         st.markdown("### ⚖️ Peso Atual")
-        if not st.session_state.peso:
+        if len(st.session_state.peso) == 1:
             cor_gauge = "blue"
             tendencia = "➖"
-            valor_gauge = 0
-            min_axis = 0
-            max_axis = 100
         else:
-            if len(st.session_state.peso) == 1:
+            if st.session_state.peso[-1] < st.session_state.peso[-2]:
+                cor_gauge = "green"
+                tendencia = "⬇️"
+            elif st.session_state.peso[-1] > st.session_state.peso[-2]:
+                cor_gauge = "orange"
+                tendencia = "⬆️"
+            else:
                 cor_gauge = "blue"
                 tendencia = "➖"
-            else:
-                if st.session_state.peso[-1] < st.session_state.peso[-2]:
-                    cor_gauge = "green"
-                    tendencia = "⬇️"
-                elif st.session_state.peso[-1] > st.session_state.peso[-2]:
-                    cor_gauge = "orange"
-                    tendencia = "⬆️"
-                else:
-                    cor_gauge = "blue"
-                    tendencia = "➖"
-            valor_gauge = st.session_state.peso[-1]
-            min_axis = min(st.session_state.peso) - 5 if st.session_state.peso else 0
-            max_axis = max(st.session_state.peso) + 5 if st.session_state.peso else 100
 
+        # criar gauge para peso atual
+        min_axis = min(st.session_state.peso) - 5 if st.session_state.peso else 0
+        max_axis = max(st.session_state.peso) + 5 if st.session_state.peso else 100
         fig_gauge = go.Figure(go.Indicator(
             mode="gauge+number",
-            value=valor_gauge,
+            value=st.session_state.peso[-1],
             gauge={'axis': {'range': [min_axis, max_axis]},
                    'bar': {'color': cor_gauge}},
             title={'text': f"Peso Atual {tendencia}"}))
@@ -913,20 +936,17 @@ if st.session_state.menu == "dashboard":
 
     with col_hist1:
         st.markdown("### ⚖️ Histórico de Peso")
-        if not st.session_state.peso:
-            st.write(" - (sem registros)")
-        else:
-            for i, (p, d) in enumerate(zip(st.session_state.peso, st.session_state.datas_peso)):
-                if i == 0:
-                    tendencia = "➖"
+        for i, (p, d) in enumerate(zip(st.session_state.peso, st.session_state.datas_peso)):
+            if i == 0:
+                tendencia = "➖"
+            else:
+                if p < st.session_state.peso[i - 1]:
+                    tendencia = "⬇️"
+                elif p > st.session_state.peso[i - 1]:
+                    tendencia = "⬆️"
                 else:
-                    if p < st.session_state.peso[i - 1]:
-                        tendencia = "⬇️"
-                    elif p > st.session_state.peso[i - 1]:
-                        tendencia = "⬆️"
-                    else:
-                        tendência = "➖"
-                st.write(f"{d.strftime('%d/%m/%Y')}: {p:.2f} kg {tendencia}")
+                    tendencia = "➖"
+            st.write(f"{d.strftime('%d/%m/%Y')}: {p:.2f} kg {tendencia}")
 
     with col_hist2:
         st.markdown("### 📊 Pontos Semanais (últimas 4 semanas)")
@@ -944,7 +964,7 @@ if st.session_state.menu == "dashboard":
                 usados = f" - usou extras: {reg.get('usou_extras',0.0):.2f} pts" if reg.get("usou_extras", 0.0) else ""
                 st.write(f"- {dia} ({dia_sem}): {reg['nome']} {reg['quantidade']:.2f}g ({reg['pontos']:.2f} pts){usados}")
 
-    # TENDÊNCIA DE PESO (gráfico)
+    # TENDÊNCIA DE PESO ABAIXO (gráfico full width)
     st.markdown("### 📈 Tendência de Peso")
     if st.session_state.peso:
         df_peso = pd.DataFrame({"Data": [d.isoformat() for d in st.session_state.datas_peso], "Peso": st.session_state.peso})
@@ -960,35 +980,20 @@ if st.session_state.menu == "dashboard":
         st.plotly_chart(fig_line, use_container_width=True)
 
 # -----------------------------
-# ROTAS / PAGES (menu)
+# ROTAS / PAGES
 # -----------------------------
-elif st.session_state.menu == "importar":
+elif st.session_state.menu == "📂 Importar planilha de alimentos":
     importar_planilha()
-elif st.session_state.menu == "cadastrar":
+elif st.session_state.menu == "➕ Cadastrar novo alimento":
     cadastrar_alimento()
-elif st.session_state.menu == "consumo":
+elif st.session_state.menu == "🍴 Registrar consumo":
     registrar_consumo()
-elif st.session_state.menu == "peso":
+elif st.session_state.menu == "⚖️ Registrar peso":
     registrar_peso()
-elif st.session_state.menu == "consultar":
+elif st.session_state.menu == "🔍 Consultar alimento":
     consultar_alimento()
-elif st.session_state.menu == "sair":
-    # Efetuar logout e recarregar para tela de login
-    logout_usuario()
-    st.success("Logout efetuado.")
-    rerun_streamlit()
+elif st.session_state.menu == "🚪 Sair":
+    st.stop()
 
 # Persistir ao final (garante salvamento de mudanças feitas fora dos botões)
 persist_all()
-
-
-
-
-
-
-
-
-
-
-
-
