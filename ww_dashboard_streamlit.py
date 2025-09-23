@@ -359,31 +359,27 @@ def rebuild_pontos_semana_from_history():
 # -----------------------------
 # UI: LOGIN / CADASTRO (antes do menu)
 # -----------------------------
-# Se o usuário não estiver logado, mostramos tela de login/cadastro e paramos a execução principal.
 if not st.session_state.get("usuario_logado"):
     st.sidebar.title("🔐 Autenticação")
+    
+    # --- LOGIN ---
     st.header("🔐 Login")
     usuario_input = st.text_input("Usuário", key="ui_user")
     senha_input = st.text_input("Senha", type="password", key="ui_pass")
-if st.button("Entrar", key="btn_login"):
-    ok = login_usuario(usuario_input.strip(), senha_input or "")
-    if ok:
-        st.success(f"Bem-vindo(a), {usuario_input}!")
-        # inicializa sessão do usuário com dados
-        init_user_session(usuario_input.strip())
-        # marca como logado
-        st.session_state.logged_in = True
-        # não precisamos forçar rerun aqui, deixamos o fluxo continuar
-    else:
-        st.error("Usuário ou senha incorretos")
-
-# se ainda não logou, parar execução
-if not st.session_state.get("logged_in", False):
-    st.stop()
-
+    if st.button("Entrar", key="btn_login"):
+        ok = login_usuario(usuario_input.strip(), senha_input or "")
+        if ok:
+            st.success(f"Bem-vindo(a), {usuario_input}!")
+            init_user_session(usuario_input.strip())
+            st.session_state.logged_in = True
+            rerun_streamlit()
+        else:
+            st.error("Usuário ou senha incorretos")
 
     st.markdown("---")
-    st.subheader("Cadastrar novo usuário")
+
+    # --- CADASTRO ---
+    st.subheader("➕ Cadastrar novo usuário")
     novo_usuario = st.text_input("Novo usuário", key="ui_new_user")
     nova_senha = st.text_input("Senha", type="password", key="ui_new_pass")
     if st.button("Cadastrar", key="btn_cad"):
@@ -392,12 +388,9 @@ if not st.session_state.get("logged_in", False):
             st.success(msg + " — faça login agora.")
         else:
             st.error(msg)
-    st.stop()  # para não renderizar o resto sem usuário
 
-# Se chegou até aqui, há um usuário logado — assegure que sessão do usuário esteja inicializada
-if st.session_state.get("usuario_logado"):
-    # garante carregamento dos dados do usuário na sessão
-    init_user_session(st.session_state.usuario_logado)
+    # impedir que o menu carregue sem login
+    st.stop()
 
 # -----------------------------
 # NAVEGAÇÃO (botões laterais)
@@ -976,6 +969,8 @@ elif st.session_state.menu == "sair":
 
 # Persistir ao final (garante salvamento de mudanças feitas fora dos botões)
 persist_all()
+
+
 
 
 
