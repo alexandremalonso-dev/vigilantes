@@ -371,7 +371,8 @@ if not st.session_state.get("usuario_logado"):
         if ok:
             st.success(f"Bem-vindo(a), {usuario_input}!")
             init_user_session(usuario_input.strip())
-            st.session_state.logged_in = True
+            st.session_state.usuario_logado = True  # <- manter consistente
+            st.session_state.usuario_atual = usuario_input.strip()
             rerun_streamlit()
         else:
             st.error("Usuário ou senha incorretos")
@@ -389,8 +390,18 @@ if not st.session_state.get("usuario_logado"):
         else:
             st.error(msg)
 
-    # impedir que o menu carregue sem login
-    st.stop()
+    # NÃO use mais st.stop()
+    # st.stop()  <-- remover
+
+# --- MENU PRINCIPAL ---
+if st.session_state.get("usuario_logado"):
+    menu_main = ["Registrar Peso", "Registrar Alimento", "Histórico", "Gráficos", "Exportar Dados"]
+    escolha = st.selectbox("Menu Principal", menu_main)
+
+    if escolha == "Registrar Peso":
+        ...
+    elif escolha == "Registrar Alimento":
+        ...
 
 # -----------------------------
 # NAVEGAÇÃO (botões laterais)
