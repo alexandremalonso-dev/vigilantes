@@ -365,16 +365,22 @@ if not st.session_state.get("usuario_logado"):
     st.header("🔐 Login")
     usuario_input = st.text_input("Usuário", key="ui_user")
     senha_input = st.text_input("Senha", type="password", key="ui_pass")
-    if st.button("Entrar", key="btn_login"):
-        ok = login_usuario(usuario_input.strip(), senha_input or "")
-        if ok:
-            st.success(f"Bem-vindo(a), {usuario_input}!")
-            # inicializa sessão do usuário com dados
-            init_user_session(usuario_input.strip())
-            # recarregar a página para aplicar menu/estado do usuário
-            rerun_streamlit()
-        else:
-            st.error("Usuário ou senha incorretos")
+if st.button("Entrar", key="btn_login"):
+    ok = login_usuario(usuario_input.strip(), senha_input or "")
+    if ok:
+        st.success(f"Bem-vindo(a), {usuario_input}!")
+        # inicializa sessão do usuário com dados
+        init_user_session(usuario_input.strip())
+        # marca como logado
+        st.session_state.logged_in = True
+        # não precisamos forçar rerun aqui, deixamos o fluxo continuar
+    else:
+        st.error("Usuário ou senha incorretos")
+
+# se ainda não logou, parar execução
+if not st.session_state.get("logged_in", False):
+    st.stop()
+
 
     st.markdown("---")
     st.subheader("Cadastrar novo usuário")
