@@ -333,29 +333,12 @@ def rebuild_pontos_semana_from_history():
 
 
 # -----------------------------
-# FUNÇÕES DO APP
+# IMPORTAR SUAS FUNÇÕES EXISTENTES
 # -----------------------------
-import streamlit as st
-import datetime
-
-# ---------- Funções principais ----------
-def registrar_peso():
-    st.write("Registrar peso")  # substitua pelo seu código real
-
-def registrar_consumo():
-    st.write("Registrar consumo")  # substitua pelo seu código real
-
-def registrar_atividade_fisica():
-    st.write("Registrar atividade física")  # substitua pelo seu código real
-
-def importar_planilha():
-    st.write("Importar planilha de alimentos")  # substitua pelo seu código real
-
-def cadastrar_alimento():
-    st.write("Cadastrar novo alimento")  # substitua pelo seu código real
-
-def consultar_alimento():
-    st.write("Consultar alimento")  # substitua pelo seu código real
+# Não usar placeholders! Se já estão no mesmo arquivo, não precisa importar.
+# Se estiverem em outros arquivos, importe corretamente:
+# from seu_modulo import registrar_peso, registrar_consumo, registrar_atividade_fisica
+# from seu_modulo import importar_planilha, cadastrar_alimento, consultar_alimento
 
 # -----------------------------
 # MENU LATERAL / NAVEGAÇÃO
@@ -421,33 +404,32 @@ for label, key in menu_itens:
 
             st.experimental_rerun()
 
-
 # -----------------------------
 # ROTAS / PAGES
 # -----------------------------
 if st.session_state.menu == "🏠 Dashboard":
-    st.write("🏠 Dashboard principal")  # substitua pelo seu dashboard
+    dashboard()  # sua função real
 
 elif st.session_state.menu == "📂 Importar planilha de alimentos":
-    importar_planilha()  # alimentos globais
+    importar_planilha()  # sua função real
 
 elif st.session_state.menu == "➕ Cadastrar novo alimento":
-    cadastrar_alimento()  # alimentos globais
+    cadastrar_alimento()  # sua função real
 
 elif st.session_state.menu == "🍴 Registrar consumo":
-    registrar_consumo()  # histórico exclusivo do usuário
+    registrar_consumo()  # sua função real
 
 elif st.session_state.menu == "⚖️ Registrar Peso":
-    registrar_peso()  # histórico exclusivo do usuário
+    registrar_peso()  # sua função real
 
 elif st.session_state.menu == "🔍 Consultar alimento":
-    consultar_alimento()  # alimentos globais
+    consultar_alimento()  # sua função real
 
 elif st.session_state.menu == "🏃 Atividades Físicas":
-    registrar_atividade_fisica()  # histórico exclusivo do usuário
+    registrar_atividade_fisica()  # sua função real
 
 elif st.session_state.menu == "🚪 Sair":
-    pass  # logout já tratado no menu lateral
+    pass  # já tratado no menu lateral
 
 
 # -----------------------------
