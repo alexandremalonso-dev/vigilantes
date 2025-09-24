@@ -333,26 +333,29 @@ def rebuild_pontos_semana_from_history():
 
 
 # -----------------------------
-# IMPORTS E DEFINIÇÃO DE FUNÇÕES
+# FUNÇÕES DO APP
 # -----------------------------
 import streamlit as st
 import datetime
-from utils import (registrar_peso, registrar_consumo, registrar_atividade_fisica,
-                   importar_planilha, cadastrar_alimento, consultar_alimento)
 
-# Caso alguma função ainda não exista, você pode definir placeholder:
-# def registrar_peso():
-#     st.write("Registrar peso")
-# def registrar_consumo():
-#     st.write("Registrar consumo")
-# def registrar_atividade_fisica():
-#     st.write("Registrar atividade física")
-# def importar_planilha():
-#     st.write("Importar planilha de alimentos")
-# def cadastrar_alimento():
-#     st.write("Cadastrar novo alimento")
-# def consultar_alimento():
-#     st.write("Consultar alimento")
+# ---------- Funções principais ----------
+def registrar_peso():
+    st.write("Registrar peso")  # substitua pelo seu código real
+
+def registrar_consumo():
+    st.write("Registrar consumo")  # substitua pelo seu código real
+
+def registrar_atividade_fisica():
+    st.write("Registrar atividade física")  # substitua pelo seu código real
+
+def importar_planilha():
+    st.write("Importar planilha de alimentos")  # substitua pelo seu código real
+
+def cadastrar_alimento():
+    st.write("Cadastrar novo alimento")  # substitua pelo seu código real
+
+def consultar_alimento():
+    st.write("Consultar alimento")  # substitua pelo seu código real
 
 # -----------------------------
 # MENU LATERAL / NAVEGAÇÃO
@@ -445,6 +448,7 @@ elif st.session_state.menu == "🏃 Atividades Físicas":
 
 elif st.session_state.menu == "🚪 Sair":
     pass  # logout já tratado no menu lateral
+
 
 # -----------------------------
 # FUNÇÃO IMPORTAR PLANILHA DE ALIMENTOS
