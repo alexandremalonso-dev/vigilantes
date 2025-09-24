@@ -1345,19 +1345,26 @@ def registrar_atividade_fisica():
 # ROTAS / PAGES
 # -----------------------------
 if st.session_state.menu == "🏠 Dashboard":
-    # ... código do dashboard ...
+    st.write("🏠 Dashboard principal")  # substitua pelo seu código real do dashboard
+
 elif st.session_state.menu == "📂 Importar planilha de alimentos":
     importar_planilha()
+
 elif st.session_state.menu == "➕ Cadastrar novo alimento":
     cadastrar_alimento()
+
 elif st.session_state.menu == "🍴 Registrar consumo":
     registrar_consumo()
+
 elif st.session_state.menu == "⚖️ Registrar peso":
     registrar_peso()
+
 elif st.session_state.menu == "🔍 Consultar alimento":
     consultar_alimento()
+
 elif st.session_state.menu == "🏃 Atividades Físicas":
     registrar_atividade_fisica()
+
 elif st.session_state.menu == "🚪 Sair":
-    # aqui já entra a lógica de logout do menu lateral
-    pass  # não precisa modificar nada aqui
+    # logout já tratado no menu lateral
+    pass
