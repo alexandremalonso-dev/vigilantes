@@ -518,12 +518,13 @@ def cadastrar_alimento():
             "Pontos": pontos
         }
 
-        # Adiciona ao session_state e persiste
-        st.session_state.alimentos.append(alimento)
+        # ⚡ Ajuste crucial: usar extend() mantém a referência da lista no session_state
+        st.session_state.alimentos.extend([alimento])
+
         persist_all()
         st.success(f"Alimento '{nome}' cadastrado com sucesso! Pontos: {pontos}")
 
-        # ⚡ Força atualização imediata da interface (resolve o problema)
+        # ⚡ Força atualização imediata da interface
         rerun_streamlit()
 
 # -----------------------------
