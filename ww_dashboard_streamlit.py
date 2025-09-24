@@ -333,6 +333,28 @@ def rebuild_pontos_semana_from_history():
 
 
 # -----------------------------
+# IMPORTS E DEFINIÇÃO DE FUNÇÕES
+# -----------------------------
+import streamlit as st
+import datetime
+from utils import (registrar_peso, registrar_consumo, registrar_atividade_fisica,
+                   importar_planilha, cadastrar_alimento, consultar_alimento)
+
+# Caso alguma função ainda não exista, você pode definir placeholder:
+# def registrar_peso():
+#     st.write("Registrar peso")
+# def registrar_consumo():
+#     st.write("Registrar consumo")
+# def registrar_atividade_fisica():
+#     st.write("Registrar atividade física")
+# def importar_planilha():
+#     st.write("Importar planilha de alimentos")
+# def cadastrar_alimento():
+#     st.write("Cadastrar novo alimento")
+# def consultar_alimento():
+#     st.write("Consultar alimento")
+
+# -----------------------------
 # MENU LATERAL / NAVEGAÇÃO
 # -----------------------------
 st.sidebar.title("📋 Menu")
@@ -354,54 +376,46 @@ for label, key in menu_itens:
         st.session_state.menu = key
 
         # -----------------------------
-        # AÇÃO RESETAR SEMANA (exclusivo do usuário)
+        # RESETAR SEMANA (dados do usuário)
         # -----------------------------
         if key == "resetar_semana":
             hoje = datetime.date.today()
             semana_atual = hoje.isocalendar()[1]
 
-            # Zera pontos da semana atual
             st.session_state.pontos_semana = [
                 w for w in st.session_state.pontos_semana if w.get("semana") != semana_atual
             ] if "pontos_semana" in st.session_state else []
 
-            # Cria nova semana zerada
             st.session_state.pontos_semana.append({
                 "semana": semana_atual,
                 "pontos": [],
                 "extras": 36.0
             })
 
-            # Zera consumo diário e extras
             st.session_state.extras = 36.0
             st.session_state.consumo_diario = 0.0
 
-            # Remove registros da semana atual do histórico
             if "consumo_historico" in st.session_state:
                 st.session_state.consumo_historico = [
                     r for r in st.session_state.consumo_historico
                     if r.get("data").isocalendar()[1] != semana_atual
                 ]
 
-            # Persistência dos dados do usuário
             persist_all()
             st.sidebar.success(f"✅ Semana {semana_atual} resetada com sucesso!")
 
         # -----------------------------
-        # AÇÃO SAIR (logout)
+        # LOGOUT
         # -----------------------------
         elif key == "🚪 Sair":
-            # Limpa sessão de login
             st.session_state.logged_in = False
             st.session_state.current_user = ""
 
-            # Remove dados privados do usuário
-            for user_key in ["peso", "datas_peso", "consumo_historico", "pontos_semana",
-                             "consumo_diario", "extras", "activities"]:
+            for user_key in ["peso", "datas_peso", "consumo_historico",
+                             "pontos_semana", "consumo_diario", "extras", "activities"]:
                 if user_key in st.session_state:
                     del st.session_state[user_key]
 
-            # Mantém alimentos globais intactos
             st.experimental_rerun()
 
 
@@ -409,8 +423,7 @@ for label, key in menu_itens:
 # ROTAS / PAGES
 # -----------------------------
 if st.session_state.menu == "🏠 Dashboard":
-    # Dashboard principal
-    pass  # seu código atual do dashboard
+    st.write("🏠 Dashboard principal")  # substitua pelo seu dashboard
 
 elif st.session_state.menu == "📂 Importar planilha de alimentos":
     importar_planilha()  # alimentos globais
@@ -421,7 +434,7 @@ elif st.session_state.menu == "➕ Cadastrar novo alimento":
 elif st.session_state.menu == "🍴 Registrar consumo":
     registrar_consumo()  # histórico exclusivo do usuário
 
-elif st.session_state.menu == "⚖️ Registrar peso":
+elif st.session_state.menu == "⚖️ Registrar Peso":
     registrar_peso()  # histórico exclusivo do usuário
 
 elif st.session_state.menu == "🔍 Consultar alimento":
@@ -431,9 +444,7 @@ elif st.session_state.menu == "🏃 Atividades Físicas":
     registrar_atividade_fisica()  # histórico exclusivo do usuário
 
 elif st.session_state.menu == "🚪 Sair":
-    # já tratado no menu lateral, nada adicional aqui
-    pass
-
+    pass  # logout já tratado no menu lateral
 
 # -----------------------------
 # FUNÇÃO IMPORTAR PLANILHA DE ALIMENTOS
