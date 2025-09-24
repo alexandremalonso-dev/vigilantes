@@ -349,30 +349,25 @@ for label, key in menu_itens:
             hoje = datetime.date.today()
             semana_atual = hoje.isocalendar()[1]
 
-            # Zera pontos da semana atual
             st.session_state.pontos_semana = [
                 w for w in st.session_state.pontos_semana if w.get("semana") != semana_atual
             ] if "pontos_semana" in st.session_state else []
 
-            # Cria nova semana zerada
             st.session_state.pontos_semana.append({
                 "semana": semana_atual,
                 "pontos": [],
                 "extras": 36.0
             })
 
-            # Zera consumo diário e extras
             st.session_state.extras = 36.0
             st.session_state.consumo_diario = 0.0
 
-            # Remove registros da semana atual do histórico
             if "consumo_historico" in st.session_state:
                 st.session_state.consumo_historico = [
                     r for r in st.session_state.consumo_historico
                     if r.get("data").isocalendar()[1] != semana_atual
                 ]
 
-            # Persistência dos dados do usuário
             if "persist_all" in globals():
                 persist_all()
 
@@ -399,8 +394,11 @@ for label, key in menu_itens:
             # Mantém alimentos globais intactos
             # st.session_state.alimentos continua disponível
 
-            # Força recarregamento para voltar à tela de login
-            st.experimental_rerun()
+            # Força recarregamento seguro
+            try:
+                st.experimental_rerun()
+            except Exception:
+                st.stop()  # fallback seguro no Streamlit Cloud
 
 
 # -----------------------------
