@@ -154,29 +154,27 @@ if not st.session_state.logged_in:
 
 
 # -----------------------------
-# CARREGAR ALIMENTOS GLOBAIS
-# -----------------------------
-if "alimentos" not in st.session_state:
-    try:
-        with open(DATA_FILE, "r", encoding="utf-8") as f:
-            global_data = json.load(f)
-            if isinstance(global_data, list):
-                st.session_state.alimentos = global_data
-            elif isinstance(global_data, dict) and "alimentos" in global_data:
-                st.session_state.alimentos = global_data["alimentos"]
-            else:
-                st.session_state.alimentos = []
-    except FileNotFoundError:
-        st.session_state.alimentos = []
-
-# -----------------------------
-# ARQUIVOS DE DADOS EXCLUSIVOS DO USUÁRIO
+# ARQUIVOS DE DADOS POR USUÁRIO
 # -----------------------------
 USER_DATA_FILE = f"data_{st.session_state.current_user}.json"
 ACTIVITY_FILE = f"activities_{st.session_state.current_user}.json"
 
-data_store = load_data(USER_DATA_FILE) or {}  # garante dict mesmo que o arquivo não exista
+
+# -----------------------------
+# CARREGAR DADOS PERSISTIDOS
+# -----------------------------
+data_store = load_data(USER_DATA_FILE)
 activities = load_data(ACTIVITY_FILE) or {}
+
+# Inicializa campos que podem não existir
+if "peso" not in data_store:
+    data_store["peso"] = []
+if "datas_peso" not in data_store:
+    data_store["datas_peso"] = []
+if "consumo_historico" not in data_store:
+    data_store["consumo_historico"] = []
+if "extras_semana" not in data_store:
+    data_store["extras_semana"] = []
 
 # -----------------------------
 # INICIALIZAÇÃO DO SESSION_STATE
@@ -184,33 +182,78 @@ activities = load_data(ACTIVITY_FILE) or {}
 if "menu" not in st.session_state:
     st.session_state.menu = "🏠 Dashboard"
 
-# Campos exclusivos do usuário
-st.session_state.peso = st.session_state.get("peso", data_store.get("peso", []))
-st.session_state.datas_peso = st.session_state.get(
-    "datas_peso",
-    [datetime.date.fromisoformat(d) for d in data_store.get("datas_peso", [])] if data_store.get("datas_peso") else []
-)
-st.session_state.consumo_historico = st.session_state.get(
-    "consumo_historico", data_store.get("consumo_historico", [])
-)
-st.session_state.pontos_semana = st.session_state.get(
-    "pontos_semana", data_store.get("pontos_semana", [])
-)
-st.session_state.extras = st.session_state.get("extras", float(data_store.get("extras", 36.0)))
-st.session_state.consumo_diario = st.session_state.get(
-    "consumo_diario", float(data_store.get("consumo_diario", 0.0))
-)
-st.session_state.meta_diaria = st.session_state.get("meta_diaria", data_store.get("meta_diaria", 29))
-st.session_state.activities = st.session_state.get("activities", activities)
+if "alimentos" not in st.session_state:
+    if isinstance(data_store, list):
+        st.session_state.alimentos = data_store
+    elif isinstance(data_store, dict) and "alimentos" in data_store:
+        st.session_state.alimentos = data_store["alimentos"]
+    else:
+        st.session_state.alimentos = []
 
+if "activities" not in st.session_state:
+    st.session_state.activities = {}  # garante histórico de atividades
+
+if isinstance(data_store, dict):  # só tenta .get se for dict
+    if "peso" not in st.session_state:
+        st.session_state.peso = data_store.get("peso", [])
+
+    if "datas_peso" not in st.session_state:
+        ds = data_store.get("datas_peso", [])
+        st.session_state.datas_peso = [datetime.date.fromisoformat(d) for d in ds] if ds else []
+
+    if "consumo_diario" not in st.session_state:
+        st.session_state.consumo_diario = float(data_store.get("consumo_diario", 0.0))
+
+    if "meta_diaria" not in st.session_state:
+        st.session_state.meta_diaria = data_store.get("meta_diaria", 29)
+
+    if "extras" not in st.session_state:
+        st.session_state.extras = float(data_store.get("extras", 36.0))
+
+    if "consumo_historico" not in st.session_state:
+        ch = data_store.get("consumo_historico", [])
+        for r in ch:
+            if isinstance(r.get("data"), str):
+                try:
+                    r["data"] = datetime.date.fromisoformat(r["data"])
+                except Exception:
+                    pass
+        st.session_state.consumo_historico = ch
+
+    if "pontos_semana" not in st.session_state:
+        ps = data_store.get("pontos_semana", [])
+        for w in ps:
+            for reg in w.get("pontos", []):
+                if isinstance(reg.get("data"), str):
+                    try:
+                        reg["data"] = datetime.date.fromisoformat(reg["data"])
+                    except Exception:
+                        pass
+        st.session_state.pontos_semana = ps
+else:
+    # caso data_store seja lista, inicializa os demais vazios
+    if "peso" not in st.session_state:
+        st.session_state.peso = []
+    if "datas_peso" not in st.session_state:
+        st.session_state.datas_peso = []
+    if "consumo_diario" not in st.session_state:
+        st.session_state.consumo_diario = 0.0
+    if "meta_diaria" not in st.session_state:
+        st.session_state.meta_diaria = 29
+    if "extras" not in st.session_state:
+        st.session_state.extras = 36.0
+    if "consumo_historico" not in st.session_state:
+        st.session_state.consumo_historico = []
+    if "pontos_semana" not in st.session_state:
+        st.session_state.pontos_semana = []
 
 # -----------------------------
-# FUNÇÃO DE PERSISTÊNCIA
+# PERSISTÊNCIA
 # -----------------------------
 def persist_all():
-    """Salva dados do usuário (privados) e mantém alimentos globais intactos"""
     try:
         ds = {
+            "alimentos": st.session_state.alimentos,
             "peso": st.session_state.peso,
             "datas_peso": [d.isoformat() for d in st.session_state.datas_peso],
             "consumo_diario": float(st.session_state.consumo_diario),
@@ -223,7 +266,8 @@ def persist_all():
                     "quantidade": r["quantidade"],
                     "pontos": r["pontos"],
                     "usou_extras": r.get("usou_extras", 0.0)
-                } for r in st.session_state.consumo_historico
+                }
+                for r in st.session_state.consumo_historico
             ],
             "pontos_semana": [
                 {
@@ -241,8 +285,8 @@ def persist_all():
                 } for w in st.session_state.pontos_semana
             ]
         }
-        save_data(ds, USER_DATA_FILE)
-        save_data(st.session_state.activities, ACTIVITY_FILE)
+        save_data(ds, USER_DATA_FILE)  # ✅ passou o file_path corretamente
+        save_data(activities, ACTIVITY_FILE)  # ✅ se você também quiser salvar atividades separadamente
     except Exception as e:
         st.error(f"Erro ao persistir dados: {e}")
 
@@ -333,15 +377,7 @@ def rebuild_pontos_semana_from_history():
 
 
 # -----------------------------
-# IMPORTAR SUAS FUNÇÕES EXISTENTES
-# -----------------------------
-# Não usar placeholders! Se já estão no mesmo arquivo, não precisa importar.
-# Se estiverem em outros arquivos, importe corretamente:
-# from seu_modulo import registrar_peso, registrar_consumo, registrar_atividade_fisica
-# from seu_modulo import importar_planilha, cadastrar_alimento, consultar_alimento
-
-# -----------------------------
-# MENU LATERAL / NAVEGAÇÃO
+# NAVEGAÇÃO (botões laterais)
 # -----------------------------
 st.sidebar.title("📋 Menu")
 
@@ -362,75 +398,65 @@ for label, key in menu_itens:
         st.session_state.menu = key
 
         # -----------------------------
-        # RESETAR SEMANA (dados do usuário)
+        # AÇÃO RESETAR SEMANA
         # -----------------------------
         if key == "resetar_semana":
             hoje = datetime.date.today()
             semana_atual = hoje.isocalendar()[1]
 
-            st.session_state.pontos_semana = [
-                w for w in st.session_state.pontos_semana if w.get("semana") != semana_atual
-            ] if "pontos_semana" in st.session_state else []
+            # Zerar pontos da semana atual
+            if "pontos_semana" in st.session_state:
+                st.session_state.pontos_semana = [
+                    w for w in st.session_state.pontos_semana if w.get("semana") != semana_atual
+                ]
+            else:
+                st.session_state.pontos_semana = []
 
+            # Cria nova semana zerada
             st.session_state.pontos_semana.append({
                 "semana": semana_atual,
                 "pontos": [],
                 "extras": 36.0
             })
 
+            # Zera consumo diário e extras
             st.session_state.extras = 36.0
             st.session_state.consumo_diario = 0.0
 
+            # Remove registros da semana atual do histórico
             if "consumo_historico" in st.session_state:
                 st.session_state.consumo_historico = [
                     r for r in st.session_state.consumo_historico
                     if r.get("data").isocalendar()[1] != semana_atual
                 ]
 
-            persist_all()
+            # Persistir alterações se houver função definida
+            if "persist_all" in globals():
+                persist_all()
+
             st.sidebar.success(f"✅ Semana {semana_atual} resetada com sucesso!")
 
         # -----------------------------
-        # LOGOUT
+        # AÇÃO SAIR
         # -----------------------------
         elif key == "🚪 Sair":
+            # Limpa sessão de login
             st.session_state.logged_in = False
             st.session_state.current_user = ""
 
-            for user_key in ["peso", "datas_peso", "consumo_historico",
-                             "pontos_semana", "consumo_diario", "extras", "activities"]:
+            # Remove dados temporários do usuário
+            for user_key in ["peso", "datas_peso", "consumo_historico", "pontos_semana", "consumo_diario", "extras"]:
                 if user_key in st.session_state:
                     del st.session_state[user_key]
 
-            st.experimental_rerun()
+            # Mantém alimentos globais (cadastrados/importados)
+            # st.session_state.alimentos continua disponível
 
-# -----------------------------
-# ROTAS / PAGES
-# -----------------------------
-if st.session_state.menu == "🏠 Dashboard":
-    dashboard()  # sua função real
-
-elif st.session_state.menu == "📂 Importar planilha de alimentos":
-    importar_planilha()  # sua função real
-
-elif st.session_state.menu == "➕ Cadastrar novo alimento":
-    cadastrar_alimento()  # sua função real
-
-elif st.session_state.menu == "🍴 Registrar consumo":
-    registrar_consumo()  # sua função real
-
-elif st.session_state.menu == "⚖️ Registrar Peso":
-    registrar_peso()  # sua função real
-
-elif st.session_state.menu == "🔍 Consultar alimento":
-    consultar_alimento()  # sua função real
-
-elif st.session_state.menu == "🏃 Atividades Físicas":
-    registrar_atividade_fisica()  # sua função real
-
-elif st.session_state.menu == "🚪 Sair":
-    pass  # já tratado no menu lateral
-
+            # Força recarregamento para voltar à tela de login
+            if hasattr(st, "experimental_rerun"):
+                st.experimental_rerun()
+            else:
+                st.stop()
 
 # -----------------------------
 # FUNÇÃO IMPORTAR PLANILHA DE ALIMENTOS
@@ -1314,3 +1340,24 @@ def registrar_atividade_fisica():
                         persist_all()
                         st.success("Atividade removida.")
                         st.stop()  # força atualização dinâmica do histórico
+
+# -----------------------------
+# ROTAS / PAGES
+# -----------------------------
+if st.session_state.menu == "🏠 Dashboard":
+    # ... código do dashboard ...
+elif st.session_state.menu == "📂 Importar planilha de alimentos":
+    importar_planilha()
+elif st.session_state.menu == "➕ Cadastrar novo alimento":
+    cadastrar_alimento()
+elif st.session_state.menu == "🍴 Registrar consumo":
+    registrar_consumo()
+elif st.session_state.menu == "⚖️ Registrar peso":
+    registrar_peso()
+elif st.session_state.menu == "🔍 Consultar alimento":
+    consultar_alimento()
+elif st.session_state.menu == "🏃 Atividades Físicas":
+    registrar_atividade_fisica()
+elif st.session_state.menu == "🚪 Sair":
+    # aqui já entra a lógica de logout do menu lateral
+    pass  # não precisa modificar nada aqui
