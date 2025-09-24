@@ -533,23 +533,19 @@ def cadastrar_alimento():
             "Pontos": pontos
         }
 
-        # ✅ Adiciona ao session_state e salva no arquivo global
+        # ✅ Adiciona ao session_state e persiste
         st.session_state.alimentos.append(alimento)
-        save_data({"alimentos": st.session_state.alimentos}, DATA_FILE)
-
-        # ✅ Persiste dados privados do usuário (peso, histórico, etc.)
         persist_all()
-
         st.success(f"Alimento '{nome}' cadastrado com sucesso! Pontos: {pontos}")
 
-        # ⚡ força atualização da interface para refletir imediatamente nas tabelas
+        # ⚡ Força atualização da interface para refletir imediatamente nas tabelas
         try:
             st.experimental_rerun()
         except Exception:
             st.stop()
 
 # -----------------------------
-# FUNÇÃO REGISTRAR CONSUMO
+# REGISTRAR CONSUMO
 # -----------------------------
 def registrar_consumo():
     st.header("🍴 Registrar Consumo")
@@ -558,97 +554,92 @@ def registrar_consumo():
         st.warning("Nenhum alimento cadastrado ainda.")
         return
 
-    # Seleção do alimento em ordem alfabética
-    nomes = sorted([a["Nome"] for a in st.session_state.alimentos])
-    escolha = st.selectbox("Escolha o alimento:", nomes, key="consumo_select")
-    alimento = next((a for a in st.session_state.alimentos if a["Nome"] == escolha), None)
-    if alimento is None:
-        st.error("Alimento não encontrado.")
-        return
-
-    porcao_ref = float(alimento.get("Porcao", 100.0))
-    pontos_por_porcao = round_points(alimento.get("Pontos", 0.0))
-    st.markdown(f"**Porção referência:** {porcao_ref} g — Pontos (por porção): **{pontos_por_porcao}**")
-
-    # Inicializa flags/estruturas
-    if "mostrar_historico_consumo" not in st.session_state:
-        st.session_state.mostrar_historico_consumo = False
+    # Inicializa histórico se não existir
     if "consumo_historico" not in st.session_state:
         st.session_state.consumo_historico = []
 
-    # Formulário para registrar quantidade
-    with st.form("form_reg_consumo", clear_on_submit=False):
-        quantidade = st.number_input(
-            f"Quantidade consumida em gramas (porção {porcao_ref} g):",
-            min_value=0.0,
-            step=1.0,
-            format="%.2f",
-            key="reg_quant"
-        )
-        submitted = st.form_submit_button("Registrar consumo")
+    # Input de busca com autocomplete
+    search_query = st.text_input("Digite o alimento consumido:", key="reg_search_query")
 
-        if submitted:
-            # 🔑 Normaliza a flag de Zero Ponto
-            zero_flag = str(
-                alimento.get("Zero Ponto", alimento.get("ZeroPonto", alimento.get("ZeroPontos", "não")))
-            ).strip().lower()
+    # Filtrar alimentos conforme pesquisa
+    resultados = [a for a in st.session_state.alimentos if search_query.lower() in a["Nome"].lower()] if search_query else st.session_state.alimentos
 
-            if zero_flag == "sim":
-                pontos_registrados = 0
-            else:
-                pontos_raw = float(alimento.get("Pontos", 0.0)) * (quantidade / porcao_ref if porcao_ref > 0 else 0.0)
-                pontos_registrados = round_points(pontos_raw)
+    if resultados:
+        escolha = st.radio("Clique no alimento consumido:", [a["Nome"] for a in resultados], key="reg_auto_select")
+        alimento = next(a for a in st.session_state.alimentos if a["Nome"] == escolha)
 
-            registro = {
-                "data": datetime.date.today(),
-                "nome": escolha,
-                "quantidade": float(quantidade),
-                "pontos": pontos_registrados,
-                "usou_extras": 0.0
-            }
-            st.session_state.consumo_historico.append(registro)
+        porcao_ref = alimento.get("Porcao", 100.0)
+        pontos_por_porcao = alimento.get("Pontos", 0.0)
+        st.markdown(f"**Porção referência:** {porcao_ref} g — Pontos (por porção): **{pontos_por_porcao:.2f}**")
 
-            rebuild_pontos_semana_from_history()
-            persist_all()
-            st.success(
-                f"🍴 Registrado {quantidade:.2f}g de {escolha}. "
-                f"Pontos: {pontos_registrados:.2f}. Total hoje: {st.session_state.consumo_diario:.2f}"
+        with st.form("form_reg_consumo", clear_on_submit=False):
+            quantidade = st.number_input(
+                f"Quantidade consumida em gramas (porção {porcao_ref} g):",
+                min_value=0.0, step=1.0, format="%.2f", key="reg_quant"
             )
+            submitted = st.form_submit_button("Registrar consumo")
 
-            # ativa flag para exibir histórico
-            st.session_state.mostrar_historico_consumo = True
-            st.stop()  # força atualizar histórico dinamicamente
+            if submitted:
+                zero_flag = str(alimento.get("Zero Ponto", "não")).strip().lower()
+                if zero_flag == "sim":
+                    pontos_registrados = 0
+                else:
+                    pontos_raw = float(alimento.get("Pontos", 0.0)) * (quantidade / porcao_ref if porcao_ref > 0 else 0.0)
+                    pontos_registrados = round_points(pontos_raw)
 
-    # Histórico com opções de editar/excluir
-    with st.expander("### Histórico de Consumo (últimos registros)", expanded=st.session_state.mostrar_historico_consumo):
-        if not st.session_state.consumo_historico:
-            st.info("Nenhum consumo registrado ainda.")
-        else:
-            for idx in range(len(st.session_state.consumo_historico) - 1, -1, -1):
-                reg = st.session_state.consumo_historico[idx]
-                data = reg["data"]
-                dia_sem = weekday_name_br(data) if isinstance(data, datetime.date) else ""
-                display = f"{data.strftime('%d/%m/%Y')} ({dia_sem}): {reg['nome']} — {reg['quantidade']:.2f} g — {reg['pontos']:.2f} pts"
-                if reg.get("usou_extras", 0.0):
-                    display += f" — usou extras: {reg.get('usou_extras',0.0):.2f} pts"
+                registro = {
+                    "data": datetime.date.today(),
+                    "nome": escolha,
+                    "quantidade": float(quantidade),
+                    "pontos": pontos_registrados,
+                    "usou_extras": 0.0
+                }
 
-                cols = st.columns([6, 1, 1])
-                cols[0].write(display)
+                st.session_state.consumo_historico.append(registro)
 
-                # Editar registro
-                if cols[1].button("Editar", key=f"edit_cons_{idx}"):
+                # Atualiza pontos da semana e consumo diário
+                rebuild_pontos_semana_from_history()
+                persist_all()
+
+                st.success(
+                    f"🍴 Registrado {quantidade:.2f}g de {escolha}. "
+                    f"Pontos: {pontos_registrados:.2f}. Total hoje: {st.session_state.consumo_diario:.2f}"
+                )
+
+                try:
+                    st.experimental_rerun()
+                except Exception:
+                    st.stop()
+
+    # Histórico com edição e exclusão
+    st.markdown("### Histórico de Consumo (últimos registros)")
+    if not st.session_state.consumo_historico:
+        st.info("Nenhum consumo registrado ainda.")
+    else:
+        for idx in range(len(st.session_state.consumo_historico)-1, -1, -1):
+            reg = st.session_state.consumo_historico[idx]
+            data = reg["data"] if isinstance(reg["data"], datetime.date) else datetime.date.fromisoformat(reg["data"])
+            dia_sem = weekday_name_br(data)
+            display = f"{data.strftime('%d/%m/%Y')} ({dia_sem}): {reg['nome']} — {reg['quantidade']:.2f} g — {reg['pontos']:.2f} pts"
+            if reg.get("usou_extras", 0.0):
+                display += f" — usou extras: {reg.get('usou_extras', 0.0):.2f} pts"
+
+            cols = st.columns([6,1,1])
+            cols[0].write(display)
+
+            # Editar registro
+            with cols[1]:
+                if st.button("Editar", key=f"edit_cons_{idx}"):
                     edit_key_q = f"edit_q_{idx}"
                     save_key = f"save_cons_{idx}"
                     with st.expander(f"Editar registro #{idx}", expanded=True):
-                        new_q = st.number_input(
-                            "Quantidade (g):", min_value=0.0, step=1.0,
-                            value=reg["quantidade"], key=edit_key_q
-                        )
+                        new_q = st.number_input("Quantidade (g):", min_value=0.0, step=1.0,
+                                                value=reg["quantidade"], key=edit_key_q)
                         alimento_ref = next((a for a in st.session_state.alimentos if a["Nome"] == reg["nome"]), None)
                         if alimento_ref:
                             porc_ref = float(alimento_ref.get("Porcao", 100.0))
-                            zero_ref = str(alimento_ref.get("Zero Ponto", "não")).strip().lower()
-                            if zero_ref == "sim":
+                            zero_flag = str(alimento_ref.get("Zero Ponto", "não")).strip().lower()
+                            if zero_flag == "sim":
                                 new_p = 0
                             else:
                                 new_p_raw = float(alimento_ref.get("Pontos", 0.0)) * (new_q / porc_ref if porc_ref > 0 else 0.0)
@@ -661,16 +652,23 @@ def registrar_consumo():
                             reg["pontos"] = new_p
                             rebuild_pontos_semana_from_history()
                             persist_all()
-                            st.success("Registro atualizado!")
-                            st.stop()  # força atualizar o histórico
+                            st.success("Registro atualizado.")
+                            try:
+                                st.experimental_rerun()
+                            except Exception:
+                                st.stop()
 
-                # Excluir registro
-                if cols[2].button("Excluir", key=f"del_cons_{idx}"):
+            # Excluir registro
+            with cols[2]:
+                if st.button("Excluir", key=f"del_cons_{idx}"):
                     st.session_state.consumo_historico.pop(idx)
                     rebuild_pontos_semana_from_history()
                     persist_all()
                     st.success("Registro excluído.")
-                    st.stop()  # força atualizar o histórico
+                    try:
+                        st.experimental_rerun()
+                    except Exception:
+                        st.stop()
 
 # -----------------------------
 # FUNÇÃO REGISTRAR PESO
@@ -862,7 +860,7 @@ def calcular_pontos(alimento):
     return pontos
 
 # -----------------------------
-# CONSULTAR + EDITAR/EXCLUIR ALIMENTO
+# CONSULTAR ALIMENTO
 # -----------------------------
 def consultar_alimento():
     st.header("🔍 Consultar Alimento")
@@ -871,125 +869,141 @@ def consultar_alimento():
         st.warning("Nenhum alimento cadastrado ainda.")
         return
 
-    # lista de nomes em ordem alfabética e escolha
-    nomes = sorted([a["Nome"] for a in st.session_state.alimentos])
-    escolha = st.selectbox("Escolha o alimento:", nomes, key="consult_select")
+    # Input de busca com autocomplete
+    search_query = st.text_input("Digite o nome do alimento para buscar:", key="search_query")
 
-    # localizar índice e objeto
-    idx = next((i for i, a in enumerate(st.session_state.alimentos) if a["Nome"] == escolha), None)
-    if idx is None:
-        st.error("Alimento não encontrado.")
-        return
-    alimento = st.session_state.alimentos[idx]
+    # Filtrar alimentos conforme pesquisa
+    resultados = [a for a in st.session_state.alimentos if search_query.lower() in a["Nome"].lower()] if search_query else st.session_state.alimentos
 
-    # ----- Exibição (mantendo design original) -----
-    st.subheader(alimento["Nome"])
-    st.markdown(f"**Porção:** {alimento.get('Porcao', 0)} g")
-    col1, col2, col3 = st.columns(3)
-    comp1 = ["Calorias", "Carbo", "Fibra"]
-    comp2 = ["Gordura", "Saturada", "Açúcar"]
-    comp3 = ["Proteina", "Sodio_mg", "Pontos"]
+    if resultados:
+        escolha = st.radio("Clique no alimento desejado:", [a["Nome"] for a in resultados], key="auto_select")
+        alimento = next(a for a in st.session_state.alimentos if a["Nome"] == escolha)
+        idx = st.session_state.alimentos.index(alimento)
 
-    for c, comps in zip([col1, col2, col3], [comp1, comp2, comp3]):
-        with c:
-            for j, comp in enumerate(comps):
-                valor = alimento.get(comp, 0)
-                if comp == "Pontos":
-                    # Calcula pontos respeitando Zero Ponto
-                    valor_display = calcular_pontos(alimento)
-                    st.markdown(f"**{comp}**")
-                    st.markdown(
-                        f"""
-                        <div style="
-                            background-color: #006400;
-                            color: white;
-                            font-size: 20px;
-                            font-weight: 700;
-                            text-align:center;
-                            padding:10px;
-                            border-radius:6px;">
-                            {valor_display:.2f}
-                        </div>
-                        """,
-                        unsafe_allow_html=True,
-                    )
-                else:
-                    st.markdown(f"**{comp}**")
-                    st.button(f"**{valor}**", key=f"{alimento['Nome']}_{comp}_{j}", disabled=True, use_container_width=True)
+        # ----- Exibição do alimento selecionado -----
+        st.subheader(alimento["Nome"])
+        st.markdown(f"**Porção:** {alimento.get('Porcao', 0)} g")
+        col1, col2, col3 = st.columns(3)
+        comp1 = ["Calorias", "Carbo", "Fibra"]
+        comp2 = ["Gordura", "Saturada", "Açúcar"]
+        comp3 = ["Proteina", "Sodio_mg", "Pontos"]
 
-    st.markdown(f"**Zero Ponto:** {alimento.get('Zero Ponto', 'não')}")
-    st.markdown("---")
+        for c, comps in zip([col1, col2, col3], [comp1, comp2, comp3]):
+            with c:
+                for j, comp in enumerate(comps):
+                    valor = alimento.get(comp, 0)
+                    if comp == "Pontos":
+                        valor_display = round_points(valor)
+                        st.markdown(f"**{comp}**")
+                        st.markdown(
+                            f"""
+                            <div style="
+                                background-color: #006400;
+                                color: white;
+                                font-size: 20px;
+                                font-weight: 700;
+                                text-align:center;
+                                padding:10px;
+                                border-radius:6px;">
+                                {valor_display:.2f}
+                            </div>
+                            """,
+                            unsafe_allow_html=True,
+                        )
+                    else:
+                        st.markdown(f"**{comp}**")
+                        st.button(f"**{valor}**", key=f"{alimento['Nome']}_{comp}_{j}", disabled=True, use_container_width=True)
 
-    # ----- Botões lado a lado (Editar / Excluir) -----
-    col_edit, col_delete = st.columns([1, 1])
-    with col_edit:
-        if st.button("✏️ Editar este alimento", key=f"edit_btn_{idx}"):
-            st.session_state[f"edit_open_{idx}"] = True
-    with col_delete:
-        if st.button("🗑️ Excluir este alimento", key=f"del_btn_{idx}"):
-            st.session_state.alimentos.pop(idx)
-            persist_all()
-            st.success(f"Alimento '{escolha}' removido com sucesso!")
-            rerun_streamlit()  # ⚡ força atualização imediata
-
-    # ----- Painel de edição (abre só se a flag estiver True) -----
-    flag_key = f"edit_open_{idx}"
-    if st.session_state.get(flag_key, False):
+        st.markdown(f"**Zero Ponto:** {alimento.get('Zero Ponto', 'não')}")
         st.markdown("---")
-        st.subheader(f"Editar '{alimento['Nome']}'")
 
-        # Botão Cancelar fora do formulário
-        col_cancel, _ = st.columns([1, 3])
-        with col_cancel:
-            if st.button("✖️ Cancelar edição", key=f"cancel_edit_{idx}"):
-                st.session_state[flag_key] = False
-                rerun_streamlit()
-
-        # Formulário de edição
-        form_key = f"form_edit_{idx}"
-        with st.form(form_key, clear_on_submit=False):
-            nome_novo = st.text_input("Nome do alimento:", value=alimento.get("Nome", ""), key=f"edit_name_{idx}")
-            porcao_novo = st.text_input("Porção (g):", value=str(alimento.get("Porcao", "")), key=f"edit_porc_{idx}")
-            calorias_novo = st.number_input("Calorias (kcal):", min_value=0.0, value=float(alimento.get("Calorias", 0.0)), step=0.1, key=f"edit_cal_{idx}")
-            carbo_novo = st.number_input("Carboidratos (g):", min_value=0.0, value=float(alimento.get("Carbo", 0.0)), step=0.1, key=f"edit_car_{idx}")
-            gordura_novo = st.number_input("Gordura (g):", min_value=0.0, value=float(alimento.get("Gordura", 0.0)), step=0.1, key=f"edit_gor_{idx}")
-            saturada_novo = st.number_input("Gordura Saturada (g):", min_value=0.0, value=float(alimento.get("Saturada", 0.0)), step=0.1, key=f"edit_sat_{idx}")
-            fibra_novo = st.number_input("Fibra (g):", min_value=0.0, value=float(alimento.get("Fibra", 0.0)), step=0.1, key=f"edit_fib_{idx}")
-            acucar_novo = st.number_input("Açúcar (g):", min_value=0.0, value=float(alimento.get("Açúcar", 0.0)), step=0.1, key=f"edit_acu_{idx}")
-            proteina_novo = st.number_input("Proteína (g):", min_value=0.0, value=float(alimento.get("Proteina", 0.0)), step=0.1, key=f"edit_pro_{idx}")
-            sodio_novo = st.number_input("Sódio (mg):", min_value=0.0, value=float(alimento.get("Sodio_mg", 0.0)), step=1.0, key=f"edit_sod_{idx}")
-            zero_ponto_novo = st.selectbox(
-                "Zero Ponto:", 
-                options=["não", "sim"], 
-                index=0 if str(alimento.get("Zero Ponto", "não")).strip().lower() == "não" else 1,
-                key=f"edit_zero_{idx}"
-            )
-
-            salvar = st.form_submit_button("💾 Salvar alterações")
-            if salvar:
-                porcao_val = safe_parse_porçao(porcao_novo)
-
-                # Atualiza alimento
-                alimento.update({
-                    "Nome": nome_novo,
-                    "Porcao": porcao_val,
-                    "Calorias": round(calorias_novo, 2),
-                    "Gordura": round(gordura_novo, 2),
-                    "Saturada": round(saturada_novo, 2),
-                    "Carbo": round(carbo_novo, 2),
-                    "Fibra": round(fibra_novo, 2),
-                    "Açúcar": round(acucar_novo, 2),
-                    "Proteina": round(proteina_novo, 2),
-                    "Sodio_mg": round(sodio_novo, 2),
-                    "Zero Ponto": zero_ponto_novo
-                })
-
-                alimento["Pontos"] = calcular_pontos(alimento)  # Recalcula pontos
-
+        # ----- Botões Editar / Excluir -----
+        col_edit, col_delete = st.columns([1, 1])
+        with col_edit:
+            if st.button("✏️ Editar este alimento", key=f"edit_btn_{idx}"):
+                st.session_state[f"edit_open_{idx}"] = True
+        with col_delete:
+            if st.button("🗑️ Excluir este alimento", key=f"del_btn_{idx}"):
+                st.session_state.alimentos.pop(idx)
                 persist_all()
-                st.session_state[flag_key] = False
-                st.success(f"Alimento '{nome_novo}' atualizado com sucesso! Pontos: {alimento['Pontos']}")
-                rerun_streamlit()  # ⚡ força atualização imediata
+                st.success(f"Alimento '{escolha}' removido com sucesso!")
+                try:
+                    st.experimental_rerun()
+                except Exception:
+                    st.stop()
+
+        # ----- Painel de edição (abre só se a flag estiver True) -----
+        flag_key = f"edit_open_{idx}"
+        if st.session_state.get(flag_key, False):
+            st.markdown("---")
+            st.subheader(f"Editar '{alimento['Nome']}'")
+
+            # Botão Cancelar fora do formulário
+            col_cancel, _ = st.columns([1, 3])
+            with col_cancel:
+                if st.button("✖️ Cancelar edição", key=f"cancel_edit_{idx}"):
+                    st.session_state[flag_key] = False
+                    try:
+                        st.experimental_rerun()
+                    except Exception:
+                        st.stop()
+
+            # Formulário de edição
+            form_key = f"form_edit_{idx}"
+            with st.form(form_key, clear_on_submit=False):
+                nome_novo = st.text_input("Nome do alimento:", value=alimento.get("Nome", ""), key=f"edit_name_{idx}")
+                porcao_novo = st.text_input("Porção (g):", value=str(alimento.get("Porcao", "")), key=f"edit_porc_{idx}")
+                calorias_novo = st.number_input("Calorias (kcal):", min_value=0.0, value=float(alimento.get("Calorias", 0.0)), step=0.1, key=f"edit_cal_{idx}")
+                carbo_novo = st.number_input("Carboidratos (g):", min_value=0.0, value=float(alimento.get("Carbo", 0.0)), step=0.1, key=f"edit_car_{idx}")
+                gordura_novo = st.number_input("Gordura (g):", min_value=0.0, value=float(alimento.get("Gordura", 0.0)), step=0.1, key=f"edit_gor_{idx}")
+                saturada_novo = st.number_input("Gordura Saturada (g):", min_value=0.0, value=float(alimento.get("Saturada", 0.0)), step=0.1, key=f"edit_sat_{idx}")
+                fibra_novo = st.number_input("Fibra (g):", min_value=0.0, value=float(alimento.get("Fibra", 0.0)), step=0.1, key=f"edit_fib_{idx}")
+                acucar_novo = st.number_input("Açúcar (g):", min_value=0.0, value=float(alimento.get("Açúcar", 0.0)), step=0.1, key=f"edit_acu_{idx}")
+                proteina_novo = st.number_input("Proteína (g):", min_value=0.0, value=float(alimento.get("Proteina", 0.0)), step=0.1, key=f"edit_pro_{idx}")
+                sodio_novo = st.number_input("Sódio (mg):", min_value=0.0, value=float(alimento.get("Sodio_mg", 0.0)), step=1.0, key=f"edit_sod_{idx}")
+                zero_ponto_novo = st.selectbox(
+                    "Zero Ponto:", 
+                    options=["não", "sim"], 
+                    index=0 if str(alimento.get("Zero Ponto", "não")).strip().lower() == "não" else 1,
+                    key=f"edit_zero_{idx}"
+                )
+
+                salvar = st.form_submit_button("💾 Salvar alterações")
+                if salvar:
+                    try:
+                        porcao_val = safe_parse_porçao(porcao_novo)
+                    except Exception:
+                        porcao_val = 100.0
+
+                    alimento.update({
+                        "Nome": nome_novo.strip(),
+                        "Porcao": porcao_val,
+                        "Calorias": round(calorias_novo, 2),
+                        "Gordura": round(gordura_novo, 2),
+                        "Saturada": round(saturada_novo, 2),
+                        "Carbo": round(carbo_novo, 2),
+                        "Fibra": round(fibra_novo, 2),
+                        "Açúcar": round(acucar_novo, 2),
+                        "Proteina": round(proteina_novo, 2),
+                        "Sodio_mg": round(sodio_novo, 2),
+                        "Zero Ponto": zero_ponto_novo,
+                        "Pontos": 0  # recalcularemos abaixo
+                    })
+
+                    # Recalcula pontos
+                    if zero_ponto_novo.strip().lower() == "sim":
+                        alimento["Pontos"] = 0
+                    else:
+                        pontos_raw = (alimento["Calorias"] / 50.0) + (alimento["Carbo"] / 10.0) + (alimento["Gordura"] / 5.0) + (alimento["Proteina"] / 5.0) + (alimento["Sodio_mg"] / 100.0)
+                        alimento["Pontos"] = round_points(pontos_raw)
+
+                    persist_all()
+                    st.session_state[flag_key] = False
+                    st.success(f"Alimento '{nome_novo}' atualizado com sucesso! Pontos: {alimento['Pontos']}")
+                    try:
+                        st.experimental_rerun()
+                    except Exception:
+                        st.stop()
 
 # -----------------------------
 # DASHBOARD PRINCIPAL
