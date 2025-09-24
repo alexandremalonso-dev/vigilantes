@@ -169,26 +169,14 @@ if "alimentos" not in st.session_state:
     except FileNotFoundError:
         st.session_state.alimentos = []
 
-
 # -----------------------------
 # ARQUIVOS DE DADOS EXCLUSIVOS DO USUÁRIO
 # -----------------------------
 USER_DATA_FILE = f"data_{st.session_state.current_user}.json"
 ACTIVITY_FILE = f"activities_{st.session_state.current_user}.json"
 
-data_store = load_data(USER_DATA_FILE)
+data_store = load_data(USER_DATA_FILE) or {}  # garante dict mesmo que o arquivo não exista
 activities = load_data(ACTIVITY_FILE) or {}
-
-# Inicializa campos que podem não existir
-if "peso" not in data_store:
-    data_store["peso"] = []
-if "datas_peso" not in data_store:
-    data_store["datas_peso"] = []
-if "consumo_historico" not in data_store:
-    data_store["consumo_historico"] = []
-if "extras_semana" not in data_store:
-    data_store["extras_semana"] = []
-
 
 # -----------------------------
 # INICIALIZAÇÃO DO SESSION_STATE
@@ -196,15 +184,24 @@ if "extras_semana" not in data_store:
 if "menu" not in st.session_state:
     st.session_state.menu = "🏠 Dashboard"
 
-# Dados exclusivos do usuário
-st.session_state.peso = data_store.get("peso", [])
-st.session_state.datas_peso = [datetime.date.fromisoformat(d) for d in data_store.get("datas_peso", [])] if data_store.get("datas_peso") else []
-st.session_state.consumo_historico = data_store.get("consumo_historico", [])
-st.session_state.pontos_semana = data_store.get("pontos_semana", [])
-st.session_state.extras = float(data_store.get("extras", 36.0))
-st.session_state.consumo_diario = float(data_store.get("consumo_diario", 0.0))
-st.session_state.meta_diaria = data_store.get("meta_diaria", 29)
-st.session_state.activities = activities  # histórico de atividades do usuário
+# Campos exclusivos do usuário
+st.session_state.peso = st.session_state.get("peso", data_store.get("peso", []))
+st.session_state.datas_peso = st.session_state.get(
+    "datas_peso",
+    [datetime.date.fromisoformat(d) for d in data_store.get("datas_peso", [])] if data_store.get("datas_peso") else []
+)
+st.session_state.consumo_historico = st.session_state.get(
+    "consumo_historico", data_store.get("consumo_historico", [])
+)
+st.session_state.pontos_semana = st.session_state.get(
+    "pontos_semana", data_store.get("pontos_semana", [])
+)
+st.session_state.extras = st.session_state.get("extras", float(data_store.get("extras", 36.0)))
+st.session_state.consumo_diario = st.session_state.get(
+    "consumo_diario", float(data_store.get("consumo_diario", 0.0))
+)
+st.session_state.meta_diaria = st.session_state.get("meta_diaria", data_store.get("meta_diaria", 29))
+st.session_state.activities = st.session_state.get("activities", activities)
 
 
 # -----------------------------
@@ -1320,4 +1317,3 @@ def registrar_atividade_fisica():
                         persist_all()
                         st.success("Atividade removida.")
                         st.stop()  # força atualização dinâmica do histórico
-   
