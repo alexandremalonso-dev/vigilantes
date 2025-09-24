@@ -528,7 +528,7 @@ def cadastrar_alimento():
         rerun_streamlit()
 
 # -----------------------------
-# REGISTRAR CONSUMO
+# FUNÇÃO REGISTRAR CONSUMO
 # -----------------------------
 def registrar_consumo():
     st.header("🍴 Registrar Consumo")
@@ -537,96 +537,92 @@ def registrar_consumo():
         st.warning("Nenhum alimento cadastrado ainda.")
         return
 
-    # Inicializa histórico se não existir
+    # Seleção do alimento em ordem alfabética
+    nomes = sorted([a["Nome"] for a in st.session_state.alimentos])
+    escolha = st.selectbox("Escolha o alimento:", nomes, key="consumo_select")
+    alimento = next((a for a in st.session_state.alimentos if a["Nome"] == escolha), None)
+    if alimento is None:
+        st.error("Alimento não encontrado.")
+        return
+
+    porcao_ref = float(alimento.get("Porcao", 100.0))
+    pontos_por_porcao = round_points(alimento.get("Pontos", 0.0))
+    st.markdown(f"**Porção referência:** {porcao_ref} g — Pontos (por porção): **{pontos_por_porcao}**")
+
+    # Inicializa flag para histórico expandido
+    if "mostrar_historico_consumo" not in st.session_state:
+        st.session_state.mostrar_historico_consumo = False
     if "consumo_historico" not in st.session_state:
         st.session_state.consumo_historico = []
 
-    # Input de busca com autocomplete
-    search_query = st.text_input("Digite o alimento consumido:", key="reg_search_query")
+    # Formulário para registrar quantidade
+    with st.form("form_reg_consumo", clear_on_submit=False):
+        quantidade = st.number_input(
+            f"Quantidade consumida em gramas (porção {porcao_ref} g):",
+            min_value=0.0,
+            step=1.0,
+            format="%.2f",
+            key="reg_quant"
+        )
+        submitted = st.form_submit_button("Registrar consumo")
 
-    # Filtrar alimentos conforme pesquisa
-    resultados = [a for a in st.session_state.alimentos if search_query.lower() in a["Nome"].lower()] if search_query else st.session_state.alimentos
+        if submitted:
+            if alimento.get("ZeroPontos", False):
+                pontos_registrados = 0
+            else:
+                pontos_raw = float(alimento.get("Pontos", 0.0)) * (quantidade / porcao_ref if porcao_ref > 0 else 0.0)
+                pontos_registrados = round_points(pontos_raw)
 
-    if resultados:
-        escolha = st.radio("Clique no alimento consumido:", [a["Nome"] for a in resultados], key="reg_auto_select")
-        alimento = next(a for a in st.session_state.alimentos if a["Nome"] == escolha)
+            registro = {
+                "data": datetime.date.today(),
+                "nome": escolha,
+                "quantidade": float(quantidade),
+                "pontos": pontos_registrados,
+                "usou_extras": 0.0
+            }
+            st.session_state.consumo_historico.append(registro)
 
-        porcao_ref = alimento.get("Porcao", 100.0)
-        pontos_por_porcao = alimento.get("Pontos", 0.0)
-        st.markdown(f"**Porção referência:** {porcao_ref} g — Pontos (por porção): **{pontos_por_porcao:.2f}**")
-
-        with st.form("form_reg_consumo", clear_on_submit=False):
-            quantidade = st.number_input(
-                f"Quantidade consumida em gramas (porção {porcao_ref} g):",
-                min_value=0.0, step=1.0, format="%.2f", key="reg_quant"
+            rebuild_pontos_semana_from_history()
+            persist_all()
+            st.success(
+                f"🍴 Registrado {quantidade:.2f}g de {escolha}. "
+                f"Pontos: {pontos_registrados:.2f}. Total hoje: {st.session_state.consumo_diario:.2f}"
             )
-            submitted = st.form_submit_button("Registrar consumo")
 
-            if submitted:
-                zero_flag = str(alimento.get("Zero Ponto", "não")).strip().lower()
-                if zero_flag == "sim":
-                    pontos_registrados = 0
-                else:
-                    pontos_raw = float(alimento.get("Pontos", 0.0)) * (quantidade / porcao_ref if porcao_ref > 0 else 0.0)
-                    pontos_registrados = round_points(pontos_raw)
+            # ativa flag para exibir histórico
+            st.session_state.mostrar_historico_consumo = True
+            st.stop()  # força atualizar histórico dinamicamente
 
-                registro = {
-                    "data": datetime.date.today(),
-                    "nome": escolha,
-                    "quantidade": float(quantidade),
-                    "pontos": pontos_registrados,
-                    "usou_extras": 0.0
-                }
+    # Histórico com opções de editar/excluir
+    with st.expander("### Histórico de Consumo (últimos registros)", expanded=st.session_state.mostrar_historico_consumo):
+        if not st.session_state.consumo_historico:
+            st.info("Nenhum consumo registrado ainda.")
+        else:
+            for idx in range(len(st.session_state.consumo_historico) - 1, -1, -1):
+                reg = st.session_state.consumo_historico[idx]
+                data = reg["data"]
+                dia_sem = weekday_name_br(data) if isinstance(data, datetime.date) else ""
+                display = f"{data.strftime('%d/%m/%Y')} ({dia_sem}): {reg['nome']} — {reg['quantidade']:.2f} g — {reg['pontos']:.2f} pts"
+                if reg.get("usou_extras", 0.0):
+                    display += f" — usou extras: {reg.get('usou_extras',0.0):.2f} pts"
 
-                st.session_state.consumo_historico.append(registro)
+                cols = st.columns([6, 1, 1])
+                cols[0].write(display)
 
-                # Atualiza pontos da semana e consumo diário
-                rebuild_pontos_semana_from_history()
-                persist_all()
-
-                st.success(
-                    f"🍴 Registrado {quantidade:.2f}g de {escolha}. "
-                    f"Pontos: {pontos_registrados:.2f}. Total hoje: {st.session_state.consumo_diario:.2f}"
-                )
-
-                try:
-                    st.experimental_rerun()
-                except Exception:
-                    st.stop()
-
-    # Histórico com edição e exclusão
-    st.markdown("### Histórico de Consumo (últimos registros)")
-    if not st.session_state.consumo_historico:
-        st.info("Nenhum consumo registrado ainda.")
-    else:
-        for idx in range(len(st.session_state.consumo_historico)-1, -1, -1):
-            reg = st.session_state.consumo_historico[idx]
-            data = reg["data"] if isinstance(reg["data"], datetime.date) else datetime.date.fromisoformat(reg["data"])
-            dia_sem = weekday_name_br(data)
-            display = f"{data.strftime('%d/%m/%Y')} ({dia_sem}): {reg['nome']} — {reg['quantidade']:.2f} g — {reg['pontos']:.2f} pts"
-            if reg.get("usou_extras", 0.0):
-                display += f" — usou extras: {reg.get('usou_extras', 0.0):.2f} pts"
-
-            cols = st.columns([6,1,1])
-            cols[0].write(display)
-
-            # Editar registro
-            with cols[1]:
-                if st.button("Editar", key=f"edit_cons_{idx}"):
+                # Editar registro
+                if cols[1].button("Editar", key=f"edit_cons_{idx}"):
                     edit_key_q = f"edit_q_{idx}"
                     save_key = f"save_cons_{idx}"
                     with st.expander(f"Editar registro #{idx}", expanded=True):
-                        new_q = st.number_input("Quantidade (g):", min_value=0.0, step=1.0,
-                                                value=reg["quantidade"], key=edit_key_q)
+                        new_q = st.number_input(
+                            "Quantidade (g):", min_value=0.0, step=1.0,
+                            value=reg["quantidade"], key=edit_key_q
+                        )
                         alimento_ref = next((a for a in st.session_state.alimentos if a["Nome"] == reg["nome"]), None)
                         if alimento_ref:
                             porc_ref = float(alimento_ref.get("Porcao", 100.0))
-                            zero_flag = str(alimento_ref.get("Zero Ponto", "não")).strip().lower()
-                            if zero_flag == "sim":
-                                new_p = 0
-                            else:
-                                new_p_raw = float(alimento_ref.get("Pontos", 0.0)) * (new_q / porc_ref if porc_ref > 0 else 0.0)
-                                new_p = round_points(new_p_raw)
+                            new_p_raw = float(alimento_ref.get("Pontos", 0.0)) * (new_q / porc_ref if porc_ref > 0 else 0.0)
+                            new_p = round_points(new_p_raw)
                         else:
                             new_p = reg["pontos"]
 
@@ -635,23 +631,16 @@ def registrar_consumo():
                             reg["pontos"] = new_p
                             rebuild_pontos_semana_from_history()
                             persist_all()
-                            st.success("Registro atualizado.")
-                            try:
-                                st.experimental_rerun()
-                            except Exception:
-                                st.stop()
+                            st.success("Registro atualizado!")
+                            st.stop()  # força atualizar o histórico
 
-            # Excluir registro
-            with cols[2]:
-                if st.button("Excluir", key=f"del_cons_{idx}"):
+                # Excluir registro
+                if cols[2].button("Excluir", key=f"del_cons_{idx}"):
                     st.session_state.consumo_historico.pop(idx)
                     rebuild_pontos_semana_from_history()
                     persist_all()
                     st.success("Registro excluído.")
-                    try:
-                        st.experimental_rerun()
-                    except Exception:
-                        st.stop()
+                    st.stop()  # força atualizar o histórico
 
 # -----------------------------
 # FUNÇÃO REGISTRAR PESO
