@@ -517,6 +517,8 @@ def importar_planilha():
 
 def cadastrar_alimento():
     st.header("➕ Cadastrar Alimento")
+    
+    # Inputs do alimento
     nome = st.text_input("Nome do alimento:", key="cad_nome")
     porcao_in = st.text_input("Porção (g) — ex: 20 ou 20g ou 120:", key="cad_porc")
     calorias = st.number_input("Calorias (kcal)", min_value=0.0, step=0.1, key="cad_cal")
@@ -530,7 +532,8 @@ def cadastrar_alimento():
     zero_ponto = st.selectbox("Zero Ponto?", ["não", "sim"], key="cad_zero")
 
     if st.button("Cadastrar alimento", key="bot_cad_alim"):
-        if not nome:
+        # Validações básicas
+        if not nome.strip():
             st.error("Informe o nome do alimento!")
             return
         try:
@@ -539,20 +542,21 @@ def cadastrar_alimento():
             st.error(f"Erro ao interpretar a porção do alimento: {e}")
             return
 
-        # Normaliza o campo Zero Ponto para consistência
+        # Normaliza o campo Zero Ponto
         zero_ponto_norm = str(zero_ponto).strip().lower()
         if zero_ponto_norm not in ["sim", "não"]:
             zero_ponto_norm = "não"
 
-        # Cálculo dos pontos considerando Zero Ponto
+        # Cálculo dos pontos
         if zero_ponto_norm == "sim":
             pontos = 0
         else:
             pontos_raw = (calorias / 50.0) + (carbo / 10.0) + (gordura / 5.0) + (proteina / 5.0) + (sodio_mg / 100.0)
             pontos = round_points(pontos_raw)
 
+        # Cria dicionário do alimento
         alimento = {
-            "Nome": nome,
+            "Nome": nome.strip(),
             "Porcao": porcao,
             "Calorias": round(calorias, 2),
             "Gordura": round(gordura, 2),
@@ -562,13 +566,17 @@ def cadastrar_alimento():
             "Açúcar": round(acucar, 2),
             "Proteina": round(proteina, 2),
             "Sodio_mg": round(sodio_mg, 2),
-            "Zero Ponto": zero_ponto_norm,  # já normalizado
+            "Zero Ponto": zero_ponto_norm,
             "Pontos": pontos
         }
 
+        # Adiciona ao session_state e persiste
         st.session_state.alimentos.append(alimento)
         persist_all()
         st.success(f"Alimento '{nome}' cadastrado com sucesso! Pontos: {pontos}")
+
+        # ⚡ força atualização da interface para refletir imediatamente nas tabelas
+        rerun_streamlit()
 
 # -----------------------------
 # FUNÇÃO REGISTRAR CONSUMO
@@ -1193,19 +1201,30 @@ def registrar_atividade_fisica():
     if "pontos_semana" not in st.session_state:
         st.session_state.pontos_semana = []
 
+    # Pontos base por atividade (para 15 min)
+    pontos_base = {
+        "Caminhada": 1,
+        "Corrida": 2,
+        "Bicicleta": 2,
+        "Academia": 2,
+        "Outro": 1
+    }
+    minutos_base = 15  # referência de 15 min
+
     # Formulário para registrar atividade
     with st.form("form_atividade", clear_on_submit=True):
-        tipo = st.selectbox("Tipo de atividade", ["Caminhada", "Corrida", "Bicicleta", "Academia", "Outro"])
+        tipo = st.selectbox("Tipo de atividade", list(pontos_base.keys()))
         minutos = st.number_input("Duração (minutos)", min_value=1, max_value=300, value=30)
-        pontos = st.number_input("Pontos obtidos", min_value=0.0, max_value=100.0, value=2.0, step=0.5)
         data_atividade = st.date_input("Data da atividade", value=datetime.date.today())
         submitted = st.form_submit_button("Registrar Atividade")
 
         if submitted:
+            # Calcula pontos automaticamente pela regra de 3
+            pontos = round((minutos / minutos_base) * pontos_base.get(tipo, 1), 2)
+
             # Adiciona atividade ao dia
             if data_atividade not in st.session_state.activities:
                 st.session_state.activities[data_atividade] = []
-
             st.session_state.activities[data_atividade].append({
                 "tipo": tipo,
                 "minutos": minutos,
@@ -1249,16 +1268,15 @@ def registrar_atividade_fisica():
                     col1.write(f"{ato['tipo']} - {ato['minutos']} min")
                     col2.write(f"{ato['pontos']} pts")
 
-                    # Botão Editar
+                    # Botão Editar: permite alterar apenas os minutos, recalculando os pontos
                     if col3.button("✏️", key=f"edit_{dia}_{idx}"):
                         edit_key_tipo = f"edit_tipo_{dia}_{idx}"
                         edit_key_min = f"edit_min_{dia}_{idx}"
-                        edit_key_pts = f"edit_pts_{dia}_{idx}"
                         with st.expander(f"Editar atividade #{idx}", expanded=True):
                             novo_tipo = st.selectbox(
                                 "Tipo de atividade",
-                                ["Caminhada", "Corrida", "Bicicleta", "Academia", "Outro"],
-                                index=["Caminhada", "Corrida", "Bicicleta", "Academia", "Outro"].index(ato["tipo"]),
+                                list(pontos_base.keys()),
+                                index=list(pontos_base.keys()).index(ato["tipo"]),
                                 key=edit_key_tipo
                             )
                             novo_min = st.number_input(
@@ -1268,20 +1286,16 @@ def registrar_atividade_fisica():
                                 value=ato["minutos"],
                                 key=edit_key_min
                             )
-                            novo_pts = st.number_input(
-                                "Pontos obtidos",
-                                min_value=0.0,
-                                max_value=100.0,
-                                value=ato["pontos"],
-                                step=0.5,
-                                key=edit_key_pts
-                            )
                             if st.button("Salvar alterações", key=f"save_{dia}_{idx}"):
+                                # Recalcula pontos automaticamente
+                                novo_pts = round((novo_min / minutos_base) * pontos_base.get(novo_tipo, 1), 2)
+                                
                                 # Atualiza extras da semana
                                 semana = iso_week_number(dia)
                                 ws = next((w for w in st.session_state.pontos_semana if w.get('semana') == semana), None)
                                 if ws:
                                     ws['extras'] = max(0.0, ws.get('extras', 36.0) - float(ato['pontos']) + float(novo_pts))
+                                
                                 # Atualiza atividade
                                 st.session_state.activities[dia][idx] = {
                                     "tipo": novo_tipo,
