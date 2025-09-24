@@ -479,7 +479,7 @@ def importar_planilha():
 # FUNÇÃO CADASTRAR ALIMENTO
 # -----------------------------
 def cadastrar_alimento():
-    st.header("➕ Cadastrar Alimento")
+    st.header("🍴 Cadastrar Alimento")
     
     nome = st.text_input("Nome do alimento")
     porcao = st.number_input("Porção (g)", min_value=0.0, value=100.0)
@@ -514,19 +514,20 @@ def cadastrar_alimento():
         alimento["Pontos"] = calcular_pontos(alimento)
 
         # ⚡ Adiciona à lista do session_state e mantém referência
+        if "alimentos" not in st.session_state:
+            st.session_state.alimentos = []
         st.session_state.alimentos.extend([alimento])
 
         # Salva no JSON
         persist_all()
 
-        # ⚡ Força atualização imediata de todas as telas
+        st.success(f"Alimento '{nome}' cadastrado com sucesso! Pontos: {alimento['Pontos']}")
+
+        # ⚡ Atualiza imediatamente todas as telas dependentes de alimentos
         try:
-            rerun_streamlit()
+            rerun_streamlit()  # força atualização de SelectBoxes e históricos
         except Exception:
             st.stop()
-
-        # Mensagem de sucesso
-        st.success(f"Alimento '{nome}' cadastrado com sucesso! Pontos: {alimento['Pontos']}")
 
 # -----------------------------
 # FUNÇÃO REGISTRAR CONSUMO
