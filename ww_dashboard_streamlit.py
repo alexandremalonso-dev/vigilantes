@@ -476,25 +476,35 @@ def importar_planilha():
 
 
 # -----------------------------
-# FUNÇÃO CADASTRAR ALIMENTO
+# CADASTRAR ALIMENTO (AJUSTADO)
 # -----------------------------
 def cadastrar_alimento():
-    st.header("🍴 Cadastrar Alimento")
+    st.header("➕ Cadastrar Alimento")
     
     nome = st.text_input("Nome do alimento")
-    porcao = st.number_input("Porção (g)", min_value=0.0, value=100.0)
-    calorias = st.number_input("Calorias", min_value=0.0, value=0.0)
-    gordura = st.number_input("Gordura (g)", min_value=0.0, value=0.0)
-    saturada = st.number_input("Gordura Saturada (g)", min_value=0.0, value=0.0)
-    carbo = st.number_input("Carboidratos (g)", min_value=0.0, value=0.0)
-    fibra = st.number_input("Fibra (g)", min_value=0.0, value=0.0)
-    acucar = st.number_input("Açúcar (g)", min_value=0.0, value=0.0)
-    proteina = st.number_input("Proteína (g)", min_value=0.0, value=0.0)
-    sodio_mg = st.number_input("Sódio (mg)", min_value=0.0, value=0.0)
+    porcao_in = st.text_input("Porção (g) — ex: 20 ou 20g ou 120", value="100")
+    calorias = st.number_input("Calorias", min_value=0.0, step=0.1)
+    carbo = st.number_input("Carboidratos (g)", min_value=0.0, step=0.1)
+    gordura = st.number_input("Gordura (g)", min_value=0.0, step=0.1)
+    saturada = st.number_input("Gordura Saturada (g)", min_value=0.0, step=0.1)
+    fibra = st.number_input("Fibra (g)", min_value=0.0, step=0.1)
+    acucar = st.number_input("Açúcar (g)", min_value=0.0, step=0.1)
+    proteina = st.number_input("Proteína (g)", min_value=0.0, step=0.1)
+    sodio_mg = st.number_input("Sódio (mg)", min_value=0.0, step=1.0)
     
     zero_pontos = st.checkbox("Este alimento tem 0 pontos?", key="cad_zero_points")
-    
+
     if st.button("Cadastrar"):
+        if not nome:
+            st.error("Informe o nome do alimento!")
+            return
+        
+        try:
+            porcao = safe_parse_porçao(porcao_in)
+        except Exception as e:
+            st.error(f"Erro ao interpretar a porção: {e}")
+            return
+
         # Cria o dicionário do alimento
         alimento = {
             "Nome": nome,
@@ -510,12 +520,10 @@ def cadastrar_alimento():
             "ZeroPontos": zero_pontos
         }
 
-        # Calcula pontos usando a função oficial
+        # Calcula pontos
         alimento["Pontos"] = calcular_pontos(alimento)
 
         # ⚡ Adiciona à lista do session_state e mantém referência
-        if "alimentos" not in st.session_state:
-            st.session_state.alimentos = []
         st.session_state.alimentos.extend([alimento])
 
         # Salva no JSON
@@ -523,14 +531,14 @@ def cadastrar_alimento():
 
         st.success(f"Alimento '{nome}' cadastrado com sucesso! Pontos: {alimento['Pontos']}")
 
-        # ⚡ Atualiza imediatamente todas as telas dependentes de alimentos
+        # Atualiza imediatamente todas as telas (como importação)
         try:
-            rerun_streamlit()  # força atualização de SelectBoxes e históricos
+            rerun_streamlit()
         except Exception:
             st.stop()
 
 # -----------------------------
-# FUNÇÃO REGISTRAR CONSUMO
+# FUNÇÃO REGISTRAR CONSUMO (AJUSTADO)
 # -----------------------------
 def registrar_consumo():
     st.header("🍴 Registrar Consumo")
@@ -594,7 +602,7 @@ def registrar_consumo():
             # ativa flag para exibir histórico
             st.session_state.mostrar_historico_consumo = True
 
-            # ⚡ Força atualização imediata da interface para refletir novo registro
+            # ⚡ Força atualização imediata da interface
             try:
                 rerun_streamlit()
             except Exception:
@@ -721,7 +729,7 @@ def registrar_peso():
                     st.stop()  # força atualização dinâmica do histórico
 
 # -----------------------------
-# Funções utilitárias
+# Funções utilitárias e inicialização de alimentos
 # -----------------------------
 import streamlit as st
 import json
@@ -732,7 +740,10 @@ DATA_FILE = "ww_data.json"
 
 def round_points(value):
     """Arredondamento padrão (round half up)."""
-    return floor(value + 0.5)
+    try:
+        return int(float(value) + 0.5)
+    except:
+        return 0
 
 def safe_parse_porçao(porc):
     """Converte entrada de porção para float (remove 'g', etc)."""
@@ -742,27 +753,50 @@ def safe_parse_porçao(porc):
         return 100.0
 
 def persist_all():
-    """Salva alimentos no JSON."""
+    """Salva alimentos globais no JSON."""
     if "alimentos" in st.session_state:
-        with open(DATA_FILE, "w") as f:
-            json.dump(st.session_state.alimentos, f, indent=4)
+        try:
+            with open(DATA_FILE, "w", encoding="utf-8") as f:
+                json.dump(st.session_state.alimentos, f, indent=4, ensure_ascii=False)
+        except Exception as e:
+            st.error(f"Erro ao salvar alimentos: {e}")
 
-# -----------------------------
-# Inicialização da sessão
-# -----------------------------
-if "alimentos" not in st.session_state:
-    try:
-        with open(DATA_FILE, "r") as f:
-            data_store = json.load(f)
-            # sempre garantir lista
-            if isinstance(data_store, list):
-                st.session_state.alimentos = data_store
-            elif isinstance(data_store, dict) and "alimentos" in data_store:
-                st.session_state.alimentos = data_store["alimentos"]
-            else:
-                st.session_state.alimentos = []
-    except FileNotFoundError:
+def load_alimentos():
+    """Carrega alimentos do JSON global para session_state."""
+    if "alimentos" not in st.session_state:
+        try:
+            with open(DATA_FILE, "r", encoding="utf-8") as f:
+                data_store = json.load(f)
+                # garante que sempre seja lista
+                if isinstance(data_store, list):
+                    st.session_state.alimentos = data_store
+                elif isinstance(data_store, dict) and "alimentos" in data_store:
+                    st.session_state.alimentos = data_store["alimentos"]
+                else:
+                    st.session_state.alimentos = []
+        except FileNotFoundError:
+            st.session_state.alimentos = []
+        except Exception as e:
+            st.session_state.alimentos = []
+            st.error(f"Erro ao carregar alimentos: {e}")
+
+def add_alimento_session(alimento):
+    """Adiciona alimento ao session_state e persiste no JSON, forçando atualização da UI."""
+    if "alimentos" not in st.session_state:
         st.session_state.alimentos = []
+    st.session_state.alimentos.append(alimento)
+    persist_all()
+    # força atualização imediata para refletir o novo alimento
+    try:
+        if hasattr(st, "experimental_rerun"):
+            st.experimental_rerun()
+        else:
+            st.stop()
+    except Exception:
+        st.stop()
+
+# Inicializa lista de alimentos
+load_alimentos()
 
 
 # -----------------------------
@@ -842,7 +876,7 @@ def calcular_pontos(alimento):
     return pontos
 
 # -----------------------------
-# CONSULTAR + EDITAR/EXCLUIR ALIMENTO
+# CONSULTAR + EDITAR/EXCLUIR ALIMENTO (AJUSTADO)
 # -----------------------------
 def consultar_alimento():
     st.header("🔍 Consultar Alimento")
@@ -904,12 +938,13 @@ def consultar_alimento():
     with col_edit:
         if st.button("✏️ Editar este alimento", key=f"edit_btn_{idx}"):
             st.session_state[f"edit_open_{idx}"] = True
+            rerun_streamlit()  # ⚡ Atualiza a interface imediatamente
     with col_delete:
         if st.button("🗑️ Excluir este alimento", key=f"del_btn_{idx}"):
             st.session_state.alimentos.pop(idx)
             persist_all()
             st.success(f"Alimento '{escolha}' removido com sucesso!")
-            rerun_streamlit()  # força atualização imediata
+            rerun_streamlit()  # ⚡ Atualiza a interface imediatamente
 
     # ----- Painel de edição (abre só se a flag estiver True) -----
     flag_key = f"edit_open_{idx}"
@@ -967,7 +1002,7 @@ def consultar_alimento():
                 persist_all()
                 st.session_state[flag_key] = False
                 st.success(f"Alimento '{nome_novo}' atualizado com sucesso! Pontos: {alimento['Pontos']}")
-                rerun_streamlit()
+                rerun_streamlit()  # ⚡ Atualização imediata
 
 # -----------------------------
 # DASHBOARD PRINCIPAL
