@@ -6,18 +6,19 @@ import datetime
 import json
 import re
 import os
-import sys  # <--- adicionado
+import sys
 from math import floor, ceil
 
 
 def rerun_streamlit():
     try:
-        if callable(st.experimental_rerun):
+        if hasattr(st, "experimental_rerun") and callable(st.experimental_rerun):
             st.experimental_rerun()
         else:
             st.stop()
     except Exception:
         st.stop()
+
 
 # -----------------------------
 # CONFIGURAÇÃO INICIAL
@@ -26,6 +27,7 @@ st.set_page_config(page_title="Vigilantes do Peso Brasil", layout="wide")
 
 DATA_FILE = "ww_data.json"
 USERS_FILE = "ww_users.json"
+
 
 # -----------------------------
 # UTILITÁRIOS
@@ -47,6 +49,7 @@ def safe_parse_porçao(value):
     except Exception:
         raise ValueError(f"Não foi possível interpretar a porção: {value}")
 
+
 def round_points(p):
     if p is None:
         return 0
@@ -55,6 +58,7 @@ def round_points(p):
     except Exception:
         return 0
     return int(p + 0.5)  # round half up
+
 
 def load_data(file_path):
     if os.path.exists(file_path):
@@ -66,6 +70,7 @@ def load_data(file_path):
             return {}
     return {}
 
+
 def save_data(data, file_path):
     try:
         with open(file_path, "w", encoding="utf-8") as f:
@@ -73,12 +78,22 @@ def save_data(data, file_path):
     except Exception as e:
         st.error(f"Erro ao salvar dados: {e}")
 
+
+def persist_all():
+    # salva todos os dados do usuário atual
+    global data_store, activities
+    save_data(data_store, USER_DATA_FILE)
+    save_data(activities, ACTIVITY_FILE)
+
+
 def iso_week_number(date_obj):
     return date_obj.isocalendar()[1]
+
 
 def weekday_name_br(dt: datetime.date):
     days = ["segunda", "terça", "quarta", "quinta", "sexta", "sábado", "domingo"]
     return days[dt.weekday()]
+
 
 # -----------------------------
 # LOGIN / USUÁRIOS
@@ -92,6 +107,7 @@ users_store = load_data(USERS_FILE)
 if not isinstance(users_store, dict):
     users_store = {}
 
+
 def login_user(email, password):
     if email in users_store and users_store[email]["password"] == password:
         st.session_state.logged_in = True
@@ -101,6 +117,7 @@ def login_user(email, password):
     else:
         st.error("Email ou senha incorretos.")
         return False
+
 
 def register_user(email, password):
     if email in users_store:
@@ -112,6 +129,7 @@ def register_user(email, password):
     st.session_state.current_user = email
     st.success(f"Cadastro realizado com sucesso! Bem-vindo(a), {email}!")
     return True
+
 
 # -----------------------------
 # INTERFACE DE LOGIN
@@ -134,17 +152,29 @@ if not st.session_state.logged_in:
 
     st.stop()  # bloqueia acesso ao restante do app até logar
 
+
 # -----------------------------
 # ARQUIVOS DE DADOS POR USUÁRIO
 # -----------------------------
 USER_DATA_FILE = f"data_{st.session_state.current_user}.json"
 ACTIVITY_FILE = f"activities_{st.session_state.current_user}.json"
 
+
 # -----------------------------
 # CARREGAR DADOS PERSISTIDOS
 # -----------------------------
 data_store = load_data(USER_DATA_FILE)
 activities = load_data(ACTIVITY_FILE) or {}
+
+# Inicializa campos que podem não existir
+if "peso" not in data_store:
+    data_store["peso"] = []
+if "datas_peso" not in data_store:
+    data_store["datas_peso"] = []
+if "consumo_historico" not in data_store:
+    data_store["consumo_historico"] = []
+if "extras_semana" not in data_store:
+    data_store["extras_semana"] = []
 
 # -----------------------------
 # INICIALIZAÇÃO DO SESSION_STATE
