@@ -534,13 +534,16 @@ def cadastrar_alimento():
 def registrar_consumo():
     st.header("🍴 Registrar Consumo")
 
-    if not st.session_state.alimentos:
+    # Garantir que existem alimentos
+    if "alimentos" not in st.session_state or not st.session_state.alimentos:
         st.warning("Nenhum alimento cadastrado ainda.")
         return
 
     # Seleção do alimento em ordem alfabética
     nomes = sorted([a["Nome"] for a in st.session_state.alimentos])
     escolha = st.selectbox("Escolha o alimento:", nomes, key="consumo_select")
+
+    # Localiza o alimento escolhido
     alimento = next((a for a in st.session_state.alimentos if a["Nome"] == escolha), None)
     if alimento is None:
         st.error("Alimento não encontrado.")
@@ -550,13 +553,13 @@ def registrar_consumo():
     pontos_por_porcao = round_points(alimento.get("Pontos", 0.0))
     st.markdown(f"**Porção referência:** {porcao_ref} g — Pontos (por porção): **{pontos_por_porcao}**")
 
-    # Inicializa flag para histórico expandido
+    # Inicializa histórico se ainda não existe
     if "mostrar_historico_consumo" not in st.session_state:
         st.session_state.mostrar_historico_consumo = False
     if "consumo_historico" not in st.session_state:
         st.session_state.consumo_historico = []
 
-    # Formulário para registrar quantidade
+    # Formulário para registrar consumo
     with st.form("form_reg_consumo", clear_on_submit=False):
         quantidade = st.number_input(
             f"Quantidade consumida em gramas (porção {porcao_ref} g):",
@@ -592,7 +595,9 @@ def registrar_consumo():
 
             # ativa flag para exibir histórico
             st.session_state.mostrar_historico_consumo = True
-            st.stop()  # força atualizar histórico dinamicamente
+
+            # Atualiza interface imediatamente
+            rerun_streamlit()
 
     # Histórico com opções de editar/excluir
     with st.expander("### Histórico de Consumo (últimos registros)", expanded=st.session_state.mostrar_historico_consumo):
@@ -633,7 +638,7 @@ def registrar_consumo():
                             rebuild_pontos_semana_from_history()
                             persist_all()
                             st.success("Registro atualizado!")
-                            st.stop()  # força atualizar o histórico
+                            rerun_streamlit()
 
                 # Excluir registro
                 if cols[2].button("Excluir", key=f"del_cons_{idx}"):
@@ -641,7 +646,7 @@ def registrar_consumo():
                     rebuild_pontos_semana_from_history()
                     persist_all()
                     st.success("Registro excluído.")
-                    st.stop()  # força atualizar o histórico
+                    rerun_streamlit()
 
 # -----------------------------
 # FUNÇÃO REGISTRAR PESO
