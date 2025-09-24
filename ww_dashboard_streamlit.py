@@ -476,7 +476,7 @@ def importar_planilha():
 
 
 # -----------------------------
-# CADASTRAR ALIMENTO
+# FUNÇÃO CADASTRAR ALIMENTO
 # -----------------------------
 def cadastrar_alimento():
     st.header("➕ Cadastrar Alimento")
@@ -519,13 +519,14 @@ def cadastrar_alimento():
         # Salva no JSON
         persist_all()
 
-        st.success(f"Alimento '{nome}' cadastrado com sucesso! Pontos: {alimento['Pontos']}")
-
-        # Atualiza imediatamente todas as telas
+        # ⚡ Força atualização imediata de todas as telas
         try:
-            rerun_streamlit()  # ou st.experimental_rerun()
+            rerun_streamlit()
         except Exception:
             st.stop()
+
+        # Mensagem de sucesso
+        st.success(f"Alimento '{nome}' cadastrado com sucesso! Pontos: {alimento['Pontos']}")
 
 # -----------------------------
 # FUNÇÃO REGISTRAR CONSUMO
