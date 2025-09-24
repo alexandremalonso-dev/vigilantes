@@ -285,7 +285,8 @@ def persist_all():
                 } for w in st.session_state.pontos_semana
             ]
         }
-        save_data(ds)
+        save_data(ds, USER_DATA_FILE)  # ✅ passou o file_path corretamente
+        save_data(activities, ACTIVITY_FILE)  # ✅ se você também quiser salvar atividades separadamente
     except Exception as e:
         st.error(f"Erro ao persistir dados: {e}")
 
