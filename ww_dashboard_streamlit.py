@@ -1296,4 +1296,3 @@ elif st.session_state.menu == "🏃 Atividades Físicas":
 elif st.session_state.menu == "🚪 Sair":
     # logout já tratado no menu lateral
     pass
-
