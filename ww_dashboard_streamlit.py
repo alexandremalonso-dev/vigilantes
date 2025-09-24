@@ -862,168 +862,134 @@ def calcular_pontos(alimento):
     return pontos
 
 # -----------------------------
-# CONSULTAR / EDITAR / EXCLUIR ALIMENTO
+# CONSULTAR + EDITAR/EXCLUIR ALIMENTO
 # -----------------------------
 def consultar_alimento():
     st.header("🔍 Consultar Alimento")
 
     if not st.session_state.alimentos:
-        st.warning("Nenhum alimento disponível ainda. Cadastre ou importe para começar.")
+        st.warning("Nenhum alimento cadastrado ainda.")
         return
 
-    # Busca com filtro parcial (opcional)
-    busca = st.text_input("Buscar (parte do nome):", key="cons_busca")
-    if busca:
-        nomes = sorted([a["Nome"] for a in st.session_state.alimentos if busca.lower() in a["Nome"].lower()])
-    else:
-        nomes = sorted([a["Nome"] for a in st.session_state.alimentos])
+    # lista de nomes em ordem alfabética e escolha
+    nomes = sorted([a["Nome"] for a in st.session_state.alimentos])
+    escolha = st.selectbox("Escolha o alimento:", nomes, key="consult_select")
 
-    if not nomes:
-        st.info("Nenhum alimento corresponde à busca.")
-        return
-
-    escolha = st.selectbox("Escolha o alimento para consultar:", nomes, key="cons_alim_select")
-    # encontra índice e referência do alimento (para edição/exclusão segura)
+    # localizar índice e objeto
     idx = next((i for i, a in enumerate(st.session_state.alimentos) if a["Nome"] == escolha), None)
     if idx is None:
         st.error("Alimento não encontrado.")
         return
-
     alimento = st.session_state.alimentos[idx]
 
-    # Mostra informações principais em colunas
-    col1, col2 = st.columns([2, 1])
-    with col1:
-        st.subheader(f"{alimento.get('Nome', '')}")
-        st.write(f"Porção (g): {alimento.get('Porcao', '')}")
-        st.write(f"Calorias: {alimento.get('Calorias', 0)} kcal")
-        st.write(f"Carboidratos: {alimento.get('Carbo', alimento.get('Carboidratos', 0))} g")
-        st.write(f"Gordura total: {alimento.get('Gordura', 0)} g")
-        st.write(f"Gordura saturada: {alimento.get('Saturada', 0)} g")
-        st.write(f"Fibra: {alimento.get('Fibra', 0)} g")
-        st.write(f"Açúcar: {alimento.get('Açúcar', alimento.get('Acucar', 0))} g")
-        st.write(f"Proteína: {alimento.get('Proteina', 0)} g")
-        st.write(f"Sódio (mg): {alimento.get('Sodio_mg', 0)}")
-    with col2:
-        # Ponto por porção (mostra arredondado)
-        pontos_raw = alimento.get("Pontos", 0.0)
-        pontos_display = round_points(float(pontos_raw))
-        st.markdown(
-            f"<div style='background:#006400;color:#fff;padding:10px;border-radius:6px;text-align:center;font-weight:700'>"
-            f"Pontos: {pontos_display}</div>",
-            unsafe_allow_html=True,
-        )
-        zero_p = alimento.get("Zero Ponto", alimento.get("ZeroPonto", alimento.get("ZeroPontos", "não")))
-        st.write(f"Zero Ponto: {zero_p}")
+    # ----- Exibição (mantendo design original) -----
+    st.subheader(alimento["Nome"])
+    st.markdown(f"**Porção:** {alimento.get('Porcao', 0)} g")
+    col1, col2, col3 = st.columns(3)
+    comp1 = ["Calorias", "Carbo", "Fibra"]
+    comp2 = ["Gordura", "Saturada", "Açúcar"]
+    comp3 = ["Proteina", "Sodio_mg", "Pontos"]
 
-    st.markdown("---")
-
-    # Exibição em tabela (opcional)
-    try:
-        df = pd.DataFrame([alimento]).T.reset_index()
-        df.columns = ["Nutriente", "Valor"]
-        st.table(df)
-    except Exception:
-        # fallback se pandas falhar
-        for k, v in alimento.items():
-            st.write(f"**{k}**: {v}")
-
-    st.markdown("---")
-
-    # ----- Painel de edição -----
-    st.subheader("✏️ Editar alimento")
-    # Usar form para enviar as alterações
-    form_key = f"form_edit_alim_{idx}"
-    with st.form(form_key):
-        nome_novo = st.text_input("Nome:", value=str(alimento.get("Nome", "")), key=f"edit_name_{idx}")
-        porcao_in = st.text_input("Porção (g):", value=str(alimento.get("Porcao", "")), key=f"edit_porc_{idx}")
-        calorias = st.number_input("Calorias (kcal):", min_value=0.0, step=0.1,
-                                   value=float(alimento.get("Calorias", 0.0)), key=f"edit_cal_{idx}")
-        carbo = st.number_input("Carboidratos (g):", min_value=0.0, step=0.1,
-                                value=float(alimento.get("Carbo", alimento.get("Carboidratos", 0.0))), key=f"edit_car_{idx}")
-        gordura = st.number_input("Gordura (g):", min_value=0.0, step=0.1,
-                                  value=float(alimento.get("Gordura", 0.0)), key=f"edit_gor_{idx}")
-        saturada = st.number_input("Gordura Saturada (g):", min_value=0.0, step=0.1,
-                                   value=float(alimento.get("Saturada", 0.0)), key=f"edit_sat_{idx}")
-        fibra = st.number_input("Fibra (g):", min_value=0.0, step=0.1,
-                                value=float(alimento.get("Fibra", 0.0)), key=f"edit_fib_{idx}")
-        acucar = st.number_input("Açúcar (g):", min_value=0.0, step=0.1,
-                                 value=float(alimento.get("Açúcar", alimento.get("Acucar", 0.0))), key=f"edit_acu_{idx}")
-        proteina = st.number_input("Proteína (g):", min_value=0.0, step=0.1,
-                                   value=float(alimento.get("Proteina", 0.0)), key=f"edit_pro_{idx}")
-        sodio_mg = st.number_input("Sódio (mg):", min_value=0.0, step=1.0,
-                                   value=float(alimento.get("Sodio_mg", 0.0)), key=f"edit_sod_{idx}")
-        zero_opt = st.selectbox("Zero Ponto?", ["não", "sim"],
-                                index=0 if str(alimento.get("Zero Ponto", "não")).strip().lower() != "sim" else 1,
-                                key=f"edit_zero_{idx}")
-
-        enviar = st.form_submit_button("Salvar alterações")
-
-        if enviar:
-            # validações
-            if not nome_novo.strip():
-                st.error("Nome não pode ficar vazio.")
-            else:
-                # evita duplicar nome (quando diferente do atual)
-                nomes_existentes = [a["Nome"] for i, a in enumerate(st.session_state.alimentos) if i != idx]
-                if nome_novo.strip() in nomes_existentes:
-                    st.error("Já existe um alimento com esse nome. Escolha outro nome.")
+    for c, comps in zip([col1, col2, col3], [comp1, comp2, comp3]):
+        with c:
+            for j, comp in enumerate(comps):
+                valor = alimento.get(comp, 0)
+                if comp == "Pontos":
+                    # Calcula pontos respeitando Zero Ponto
+                    valor_display = calcular_pontos(alimento)
+                    st.markdown(f"**{comp}**")
+                    st.markdown(
+                        f"""
+                        <div style="
+                            background-color: #006400;
+                            color: white;
+                            font-size: 20px;
+                            font-weight: 700;
+                            text-align:center;
+                            padding:10px;
+                            border-radius:6px;">
+                            {valor_display:.2f}
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
                 else:
-                    # interpreta porção
-                    try:
-                        porcao = safe_parse_porçao(porcao_in)
-                    except Exception as e:
-                        st.error(f"Erro ao interpretar a porção: {e}")
-                        return
+                    st.markdown(f"**{comp}**")
+                    st.button(f"**{valor}**", key=f"{alimento['Nome']}_{comp}_{j}", disabled=True, use_container_width=True)
 
-                    # monta dicionário e calcula pontos (respeitando Zero Ponto)
-                    updated = {
-                        "Nome": nome_novo.strip(),
-                        "Porcao": porcao,
-                        "Calorias": round(float(calorias), 2),
-                        "Gordura": round(float(gordura), 2),
-                        "Saturada": round(float(saturada), 2),
-                        "Carbo": round(float(carbo), 2),
-                        "Fibra": round(float(fibra), 2),
-                        "Açúcar": round(float(acucar), 2),
-                        "Proteina": round(float(proteina), 2),
-                        "Sodio_mg": round(float(sodio_mg), 2),
-                        "Zero Ponto": str(zero_opt).strip().lower()
-                    }
+    st.markdown(f"**Zero Ponto:** {alimento.get('Zero Ponto', 'não')}")
+    st.markdown("---")
 
-                    # calcula pontos com sua função (mantém consistência)
-                    updated["Pontos"] = 0 if str(zero_opt).strip().lower() == "sim" else calcular_pontos(updated)
+    # ----- Botões lado a lado (Editar / Excluir) -----
+    col_edit, col_delete = st.columns([1, 1])
+    with col_edit:
+        if st.button("✏️ Editar este alimento", key=f"edit_btn_{idx}"):
+            st.session_state[f"edit_open_{idx}"] = True
+    with col_delete:
+        if st.button("🗑️ Excluir este alimento", key=f"del_btn_{idx}"):
+            st.session_state.alimentos.pop(idx)
+            persist_all()
+            st.success(f"Alimento '{escolha}' removido com sucesso!")
+            rerun_streamlit()  # ⚡ força atualização imediata
 
-                    # atualiza a lista global e salva no DATA_FILE
-                    st.session_state.alimentos[idx] = updated
-                    try:
-                        save_data({"alimentos": st.session_state.alimentos}, DATA_FILE)
-                    except Exception as e:
-                        st.error(f"Erro ao salvar alimentos globais: {e}")
-                        return
+    # ----- Painel de edição (abre só se a flag estiver True) -----
+    flag_key = f"edit_open_{idx}"
+    if st.session_state.get(flag_key, False):
+        st.markdown("---")
+        st.subheader(f"Editar '{alimento['Nome']}'")
 
-                    st.success("Alimento atualizado com sucesso.")
-                    # atualizar a UI imediatamente
-                    try:
-                        st.experimental_rerun()
-                    except Exception:
-                        st.stop()
+        # Botão Cancelar fora do formulário
+        col_cancel, _ = st.columns([1, 3])
+        with col_cancel:
+            if st.button("✖️ Cancelar edição", key=f"cancel_edit_{idx}"):
+                st.session_state[flag_key] = False
+                rerun_streamlit()
 
-    # ----- Botão Excluir (fora do form para evitar submissão conjunta) -----
-    if st.button("🗑️ Excluir este alimento", key=f"del_alim_{idx}"):
-        confirm = st.confirm if hasattr(st, "confirm") else None
-        # Remoção direta (se quiser confirmação visual, poderia abrir modal; aqui removemos direto)
-        st.session_state.alimentos.pop(idx)
-        try:
-            save_data({"alimentos": st.session_state.alimentos}, DATA_FILE)
-        except Exception as e:
-            st.error(f"Erro ao salvar arquivo global após exclusão: {e}")
-            return
-        st.success("Alimento excluído com sucesso.")
-        try:
-            st.experimental_rerun()
-        except Exception:
-            st.stop()
+        # Formulário de edição
+        form_key = f"form_edit_{idx}"
+        with st.form(form_key, clear_on_submit=False):
+            nome_novo = st.text_input("Nome do alimento:", value=alimento.get("Nome", ""), key=f"edit_name_{idx}")
+            porcao_novo = st.text_input("Porção (g):", value=str(alimento.get("Porcao", "")), key=f"edit_porc_{idx}")
+            calorias_novo = st.number_input("Calorias (kcal):", min_value=0.0, value=float(alimento.get("Calorias", 0.0)), step=0.1, key=f"edit_cal_{idx}")
+            carbo_novo = st.number_input("Carboidratos (g):", min_value=0.0, value=float(alimento.get("Carbo", 0.0)), step=0.1, key=f"edit_car_{idx}")
+            gordura_novo = st.number_input("Gordura (g):", min_value=0.0, value=float(alimento.get("Gordura", 0.0)), step=0.1, key=f"edit_gor_{idx}")
+            saturada_novo = st.number_input("Gordura Saturada (g):", min_value=0.0, value=float(alimento.get("Saturada", 0.0)), step=0.1, key=f"edit_sat_{idx}")
+            fibra_novo = st.number_input("Fibra (g):", min_value=0.0, value=float(alimento.get("Fibra", 0.0)), step=0.1, key=f"edit_fib_{idx}")
+            acucar_novo = st.number_input("Açúcar (g):", min_value=0.0, value=float(alimento.get("Açúcar", 0.0)), step=0.1, key=f"edit_acu_{idx}")
+            proteina_novo = st.number_input("Proteína (g):", min_value=0.0, value=float(alimento.get("Proteina", 0.0)), step=0.1, key=f"edit_pro_{idx}")
+            sodio_novo = st.number_input("Sódio (mg):", min_value=0.0, value=float(alimento.get("Sodio_mg", 0.0)), step=1.0, key=f"edit_sod_{idx}")
+            zero_ponto_novo = st.selectbox(
+                "Zero Ponto:", 
+                options=["não", "sim"], 
+                index=0 if str(alimento.get("Zero Ponto", "não")).strip().lower() == "não" else 1,
+                key=f"edit_zero_{idx}"
+            )
+
+            salvar = st.form_submit_button("💾 Salvar alterações")
+            if salvar:
+                porcao_val = safe_parse_porçao(porcao_novo)
+
+                # Atualiza alimento
+                alimento.update({
+                    "Nome": nome_novo,
+                    "Porcao": porcao_val,
+                    "Calorias": round(calorias_novo, 2),
+                    "Gordura": round(gordura_novo, 2),
+                    "Saturada": round(saturada_novo, 2),
+                    "Carbo": round(carbo_novo, 2),
+                    "Fibra": round(fibra_novo, 2),
+                    "Açúcar": round(acucar_novo, 2),
+                    "Proteina": round(proteina_novo, 2),
+                    "Sodio_mg": round(sodio_novo, 2),
+                    "Zero Ponto": zero_ponto_novo
+                })
+
+                alimento["Pontos"] = calcular_pontos(alimento)  # Recalcula pontos
+
+                persist_all()
+                st.session_state[flag_key] = False
+                st.success(f"Alimento '{nome_novo}' atualizado com sucesso! Pontos: {alimento['Pontos']}")
+                rerun_streamlit()  # ⚡ força atualização imediata
 
 # -----------------------------
 # DASHBOARD PRINCIPAL
