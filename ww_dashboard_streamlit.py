@@ -1153,7 +1153,7 @@ def registrar_atividade_fisica():
     # Formulário para registrar atividade
     with st.form("form_atividade", clear_on_submit=True):
         tipo = st.selectbox("Tipo de atividade", list(pontos_base.keys()))
-        minutos = st.number_input("Duração (minutos)", min_value=1, max_value=300, value=30)
+        minutos = st.number_input("Duração (minutos)", min_value=1, max_value=300, value=15)
         data_atividade = st.date_input("Data da atividade", value=datetime.date.today())
         submitted = st.form_submit_button("Registrar Atividade")
 
