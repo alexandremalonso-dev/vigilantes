@@ -1134,6 +1134,14 @@ if st.session_state.menu == "🏠 Dashboard":
 # Tendência de Peso (abaixo dos históricos)
 # -----------------------------
 import numpy as np
+import pandas as pd
+
+# criar DataFrame com datas e pesos
+df_peso = pd.DataFrame({
+    "Data": [d.isoformat() for d in st.session_state.datas_peso],
+    "Peso": st.session_state.peso
+})
+df_peso["Data_dt"] = pd.to_datetime(df_peso["Data"])
 
 if len(df_peso) >= 2:
     # transformar datas em número ordinal para regressão
