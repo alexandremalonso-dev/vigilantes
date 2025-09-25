@@ -140,6 +140,14 @@ def login_user(email, password):
         return False
 
 # -----------------------------
+# FLAGS DE LOGIN (garantia de inicialização)
+# -----------------------------
+if "logged_in" not in st.session_state:
+    st.session_state.logged_in = False
+if "current_user" not in st.session_state:
+    st.session_state.current_user = ""
+    
+# -----------------------------
 # INTERFACE DE LOGIN
 # -----------------------------
 if not st.session_state.logged_in:
