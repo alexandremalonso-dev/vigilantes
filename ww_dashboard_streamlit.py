@@ -96,7 +96,7 @@ def weekday_name_br(dt: datetime.date):
 
 
 # -----------------------------
-# LOGIN / USUÁRIOS
+# LOGIN / USUÁRIOS E CARREGAMENTO DE DADOS
 # -----------------------------
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
@@ -115,65 +115,79 @@ def login_user(email, password):
         st.session_state.logged_in = True
         st.session_state.current_user = email
 
-# -----------------------------
-# Carrega dados privados do usuário
-# -----------------------------
-data_store = load_data(USER_DATA_FILE) or {}
-activities_store = load_data(ACTIVITY_FILE) or {}
+        # Definir arquivos do usuário
+        USER_DATA_FILE = f"data_{email}.json"
+        ACTIVITY_FILE = f"activities_{email}.json"
 
-# Reconstruir session_state básico
-st.session_state.peso = st.session_state.get("peso", data_store.get("peso", []))
-st.session_state.datas_peso = st.session_state.get(
-    "datas_peso",
-    [datetime.date.fromisoformat(d) for d in data_store.get("datas_peso", [])] if data_store.get("datas_peso") else []
-)
-st.session_state.consumo_historico = st.session_state.get(
-    "consumo_historico", data_store.get("consumo_historico", [])
-)
-st.session_state.pontos_semana = st.session_state.get(
-    "pontos_semana", data_store.get("pontos_semana", [])
-)
-st.session_state.extras = st.session_state.get("extras", float(data_store.get("extras", 36.0)))
-st.session_state.consumo_diario = st.session_state.get(
-    "consumo_diario", float(data_store.get("consumo_diario", 0.0))
-)
-st.session_state.meta_diaria = st.session_state.get("meta_diaria", data_store.get("meta_diaria", 29))
+        # Carregar dados privados do usuário
+        data_store = load_data(USER_DATA_FILE) or {}
+        activities_store = load_data(ACTIVITY_FILE) or {}
 
-# Garantir que cada semana tenha chave de atividades
-for w in st.session_state.pontos_semana:
-    if "atividades" not in w:
-        w["atividades"] = []
+        # Reconstruir session_state básico
+        st.session_state.peso = st.session_state.get("peso", data_store.get("peso", []))
+        st.session_state.datas_peso = st.session_state.get(
+            "datas_peso",
+            [datetime.date.fromisoformat(d) for d in data_store.get("datas_peso", [])]
+            if data_store.get("datas_peso") else []
+        )
+        st.session_state.consumo_historico = st.session_state.get(
+            "consumo_historico", data_store.get("consumo_historico", [])
+        )
+        st.session_state.pontos_semana = st.session_state.get(
+            "pontos_semana", data_store.get("pontos_semana", [])
+        )
+        st.session_state.extras = st.session_state.get("extras", float(data_store.get("extras", 36.0)))
+        st.session_state.consumo_diario = st.session_state.get(
+            "consumo_diario", float(data_store.get("consumo_diario", 0.0))
+        )
+        st.session_state.meta_diaria = st.session_state.get("meta_diaria", data_store.get("meta_diaria", 29))
 
-# Migrar atividades soltas para a semana correta
-for dia_str, lst in activities_store.items():
-    dia_obj = (
-        datetime.datetime.strptime(dia_str, "%Y-%m-%d").date()
-        if isinstance(dia_str, str)
-        else dia_str
-    )
-    semana_num = iso_week_number(dia_obj)
-    semana_obj = next((w for w in st.session_state.pontos_semana if w.get("semana") == semana_num), None)
-    if semana_obj is None:
-        semana_obj = {"semana": semana_num, "pontos": [], "extras": 36.0, "atividades": []}
-        st.session_state.pontos_semana.append(semana_obj)
-    for a in lst:
-        atividade = {
-            "tipo": a.get("tipo"),
-            "minutos": a.get("minutos", 0),
-            "pontos": a.get("pontos", 0),
-            "horario": a.get("horario", dia_obj.isoformat())
-        }
-        semana_obj["atividades"].append(atividade)
+        # Garantir que cada semana tenha chave de atividades
+        for w in st.session_state.pontos_semana:
+            if "atividades" not in w:
+                w["atividades"] = []
 
-# Limpar activities soltas (agora migradas)
-st.session_state.activities = {}
+        # Migrar atividades soltas para a semana correta
+        for dia_str, lst in activities_store.items():
+            dia_obj = (
+                datetime.datetime.strptime(dia_str, "%Y-%m-%d").date()
+                if isinstance(dia_str, str)
+                else dia_str
+            )
+            semana_num = iso_week_number(dia_obj)
+            semana_obj = next((w for w in st.session_state.pontos_semana if w.get("semana") == semana_num), None)
+            if semana_obj is None:
+                semana_obj = {"semana": semana_num, "pontos": [], "extras": 36.0, "atividades": []}
+                st.session_state.pontos_semana.append(semana_obj)
+            for a in lst:
+                atividade = {
+                    "tipo": a.get("tipo"),
+                    "minutos": a.get("minutos", 0),
+                    "pontos": a.get("pontos", 0),
+                    "horario": a.get("horario", dia_obj.isoformat())
+                }
+                semana_obj["atividades"].append(atividade)
 
-# Mantém os outros dados do perfil
-st.session_state.sexo = st.session_state.get("sexo", data_store.get("sexo", "Feminino"))
-st.session_state.idade = st.session_state.get("idade", data_store.get("idade", 30))
-st.session_state.altura = st.session_state.get("altura", data_store.get("altura", 1.70))
-st.session_state.objetivo = st.session_state.get("objetivo", data_store.get("objetivo", "manutenção"))
-st.session_state.nivel_atividade = st.session_state.get("nivel_atividade", data_store.get("nivel_atividade", "sedentário"))
+        # Limpar activities soltas (agora migradas)
+        st.session_state.activities = {}
+
+        st.success(f"Bem-vindo(a), {email}!")
+        return True
+    else:
+        st.error("Email ou senha incorretos.")
+        return False
+
+def register_user(email, password):
+    global users_store
+    if email in users_store:
+        st.error("Usuário já existe!")
+        return False
+    users_store[email] = {"password": password}
+    save_data(users_store, USERS_FILE)
+    st.session_state.logged_in = True
+    st.session_state.current_user = email
+    st.success(f"Cadastro realizado com sucesso! Bem-vindo(a), {email}!")
+    return True
 
 # -----------------------------
 # INTERFACE DE LOGIN
