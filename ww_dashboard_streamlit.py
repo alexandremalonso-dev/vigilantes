@@ -1047,6 +1047,7 @@ def consultar_alimento():
                 st.success(f"Alimento '{nome_novo}' atualizado com sucesso! Pontos: {alimento['Pontos']}")
                 rerun_streamlit()
 
+
 # -----------------------------
 # DASHBOARD PRINCIPAL
 # -----------------------------
@@ -1059,6 +1060,22 @@ if st.session_state.menu == "🏠 Dashboard":
         registrar_peso()
         st.stop()
 
+    # -----------------------------
+    # Atualiza meta diária automaticamente
+    # -----------------------------
+    if all(k in st.session_state for k in ["sexo", "idade", "altura", "objetivo", "nivel_atividade"]):
+        st.session_state.meta_diaria = calcular_meta_diaria(
+            sexo=st.session_state.sexo,
+            idade=st.session_state.idade,
+            peso=st.session_state.peso[-1] if st.session_state.peso else 70,
+            altura=st.session_state.altura,
+            objetivo=st.session_state.objetivo,
+            nivel_atividade=st.session_state.nivel_atividade
+        )
+    else:
+        # Caso dados do perfil não preenchidos, mantém valor padrão
+        st.session_state.meta_diaria = st.session_state.get("meta_diaria", 29)
+
     # Garantir semana atual e recalcular a partir do histórico
     ensure_current_week_exists()
     rebuild_pontos_semana_from_history()
@@ -1069,18 +1086,6 @@ if st.session_state.menu == "🏠 Dashboard":
     if not semana_obj:
         semana_obj = {"semana": semana_atual, "extras": 36.0, "pontos": []}
         st.session_state.pontos_semana.append(semana_obj)
-
-    # -----------------------------
-    # Atualiza meta diária dinamicamente com base no peso atual
-    # -----------------------------
-    st.session_state.meta_diaria = calcular_meta_diaria(
-        sexo=st.session_state.sexo,
-        idade=st.session_state.idade,
-        peso=peso_atual,
-        altura=st.session_state.altura,
-        objetivo=st.session_state.objetivo,
-        nivel_atividade=st.session_state.nivel_atividade
-    )
 
     # -----------------------------
     # Indicadores principais (gráficos)
