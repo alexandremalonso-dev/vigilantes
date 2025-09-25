@@ -1345,7 +1345,8 @@ if st.session_state.menu == "🏠 Dashboard":
                 usados_txt = f" - usou extras: ({reg.get('usou_extras',0.0):.2f} pts)" if reg.get("usou_extras",0.0) else ""
                 st.markdown(
                     f"<div style='padding:10px; border:1px solid #f39c12; border-radius:5px; margin-bottom:5px;'>"
-                    f"{dia_str} ({dia_sem}): {reg['nome']} {reg['quantidade']:.2f} g <span style='color:#1f3c88'>({reg['pontos']:.2f} pts)</span>{usados_txt}"
+                    f"{dia_str} ({dia_sem}): {reg['nome']} {reg['quantidade']:.2f} g "
+                    f"<span style='color:#1f3c88'>({reg['pontos']:.2f} pts)</span>{usados_txt}"
                     f"</div>", unsafe_allow_html=True
                 )
         else:
@@ -1362,7 +1363,8 @@ if st.session_state.menu == "🏠 Dashboard":
                 dia_sem = weekday_name_br(d) if isinstance(d, datetime.date) else ""
                 st.markdown(
                     f"<div style='padding:10px; border:1px solid #1abc9c; border-radius:5px; margin-bottom:5px;'>"
-                    f"{d_str} ({dia_sem}): {tipo} - {minutos:.2f} min <span style='color:#1f3c88'>({pontos:.2f} pts)</span>"
+                    f"{d_str} ({dia_sem}): {tipo} - {minutos:.2f} min "
+                    f"<span style='color:#1f3c88'>({pontos:.2f} pts)</span>"
                     f"</div>", unsafe_allow_html=True
                 )
         else:
@@ -1404,7 +1406,12 @@ if st.session_state.menu == "🏠 Dashboard":
             else:
                 y_trend = np.array(df_peso["Peso"])
                 mode_plot = "markers"
-            fig_line = go.Figure(go.Scatter(x=df_peso["Data_dt"].tolist(), y=y_trend.tolist(), mode=mode_plot, line=dict(color="#8e44ad", width=3)))
+            fig_line = go.Figure(go.Scatter(
+                x=df_peso["Data_dt"].tolist(),
+                y=y_trend.tolist(),
+                mode=mode_plot,
+                line=dict(color="#8e44ad", width=3)
+            ))
             fig_line.update_layout(yaxis_title="Peso (kg)", xaxis_title="Data", template="plotly_white", height=400)
             st.plotly_chart(fig_line, use_container_width=True)
         else:
