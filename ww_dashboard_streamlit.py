@@ -1128,137 +1128,123 @@ if st.session_state.menu == "🏠 Dashboard":
         st.plotly_chart(fig_line, use_container_width=True)
 
 # -----------------------------
-# FUNÇÃO DE ATIVIDADES FÍSICAS
+# REGISTRO DE ATIVIDADES FÍSICAS
 # -----------------------------
 def registrar_atividade_fisica():
-    st.markdown("### 🏃 Registrar Atividade Física")
-    
-    # Inicializa flags e estruturas
-    if "mostrar_historico_atividade" not in st.session_state:
-        st.session_state.mostrar_historico_atividade = False
-    if "activities" not in st.session_state:
-        st.session_state.activities = {}
-    if "pontos_semana" not in st.session_state:
-        st.session_state.pontos_semana = []
+    st.header("🏃 Atividades Físicas")
 
-    # Pontos base por atividade (para 15 min)
-    pontos_base = {
-        "Caminhada": 1,
-        "Corrida": 2,
-        "Bicicleta": 2,
-        "Academia": 2,
-        "Outro": 1
+    if "historico_atividades" not in st.session_state:
+        st.session_state["historico_atividades"] = []
+
+    # Garantir semana atual
+    ensure_current_week_exists()
+    semana_atual = iso_week_number(datetime.date.today())
+    semana_obj = next((w for w in st.session_state.pontos_semana if w["semana"] == semana_atual), None)
+    if semana_obj is None:
+        semana_obj = {"semana": semana_atual, "pontos": [], "extras": 36.0}
+        st.session_state.pontos_semana.append(semana_obj)
+
+    # Tipos de atividades físicas
+    atividades = {
+        "Musculação": {"pontos": 2, "cor": "#2980b9"},
+        "Corrida": {"pontos": 2, "cor": "#27ae60"},
+        "Caminhada": {"pontos": 1, "cor": "#f39c12"},
+        "Bicicleta": {"pontos": 4, "cor": "#8e44ad"}
     }
-    minutos_base = 15  # referência de 15 min
 
-    # Formulário para registrar atividade
-    with st.form("form_atividade", clear_on_submit=True):
-        tipo = st.selectbox("Tipo de atividade", list(pontos_base.keys()))
-        minutos = st.number_input("Duração (minutos)", min_value=1, max_value=300, value=30)
-        data_atividade = st.date_input("Data da atividade", value=datetime.date.today())
-        submitted = st.form_submit_button("Registrar Atividade")
+    st.markdown("### Selecione a atividade e ajuste os minutos")
+    cols = st.columns(len(atividades))
+    for i, (atividade, info) in enumerate(atividades.items()):
+        with cols[i]:
+            st.markdown(
+                f"<div style='text-align:center;font-weight:bold;color:{info['cor']}'>{atividade}</div>",
+                unsafe_allow_html=True
+            )
+            key_min = f"min_{atividade}"
+            if key_min not in st.session_state:
+                st.session_state[key_min] = 15
 
-        if submitted:
-            # Calcula pontos automaticamente pela regra de 3
-            pontos = round((minutos / minutos_base) * pontos_base.get(tipo, 1), 2)
+            if st.button("➕ +5 min", key=f"mais_{atividade}", use_container_width=True):
+                st.session_state[key_min] += 5
+            if st.button("➖ -5 min", key=f"menos_{atividade}", use_container_width=True):
+                st.session_state[key_min] = max(5, st.session_state[key_min] - 5)
 
-            # Adiciona atividade ao dia
-            if data_atividade not in st.session_state.activities:
-                st.session_state.activities[data_atividade] = []
-            st.session_state.activities[data_atividade].append({
-                "tipo": tipo,
-                "minutos": minutos,
-                "pontos": pontos
-            })
+            st.markdown(
+                f"<div style='text-align:center;font-size:18px;'><b>{st.session_state[key_min]} min</b></div>",
+                unsafe_allow_html=True
+            )
 
-            # Atualiza pontos extras da semana
-            semana_atual = iso_week_number(data_atividade)
-            semana_obj = next((w for w in st.session_state.pontos_semana if w["semana"] == semana_atual), None)
-            if not semana_obj:
-                semana_obj = {"semana": semana_atual, "extras": 36.0, "pontos": []}
-                st.session_state.pontos_semana.append(semana_obj)
+            if st.button(f"✅ Registrar", key=f"reg_{atividade}", use_container_width=True):
+                # <-- Aqui aplicamos o round_points corretamente
+                pontos_atividade = round_points((st.session_state[key_min] / 15) * info["pontos"])
+                registro = {
+                    "atividade": atividade,
+                    "minutos": st.session_state[key_min],
+                    "pontos": pontos_atividade,
+                    "horario": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                }
+                st.session_state["historico_atividades"].append(registro)
 
-            semana_obj["extras"] = semana_obj.get("extras", 36.0) + pontos
-            semana_obj["pontos"].append({
-                "data": data_atividade,
-                "nome": tipo,
-                "quantidade": minutos,
-                "pontos": pontos,
-                "usou_extras": 0.0
-            })
+                # Atualiza diretamente o objeto no st.session_state.pontos_semana
+                for w in st.session_state.pontos_semana:
+                    if w["semana"] == semana_atual:
+                        w["extras"] += pontos_atividade
+                        semana_obj = w  # garante sincronização
+                        break
 
-            persist_all()
-            st.success(f"✅ Atividade '{tipo}' registrada! Pontos extras atualizados: {semana_obj['extras']:.2f}")
+                st.success(f"{atividade} registrada: {registro['minutos']} min, {pontos_atividade} pontos")
+                rerun_streamlit()  # ⚡ atualiza imediatamente o Dashboard
 
-            # ativa flag para exibir histórico
-            st.session_state.mostrar_historico_atividade = True
-            st.stop()  # força atualização dinâmica do histórico
+    st.markdown("---")
+    st.subheader("📜 Histórico de Atividades")
+    for i, registro in enumerate(st.session_state["historico_atividades"]):
+        col1, col2, col3, col4 = st.columns([3, 2, 2, 1])
+        with col1:
+            st.write(f"{registro['horario']}: {registro['atividade']}")
+        with col2:
+            novo_min = st.number_input(
+                f"Minutos {i}",
+                value=registro["minutos"],
+                min_value=5,
+                step=5,
+                key=f"edit_min_{i}"
+            )
+        with col3:
+            st.write(f"Pontos: {registro['pontos']}")
+        with col4:
+            if st.button(f"❌ Excluir {i}"):
+                # Atualiza diretamente no session_state
+                for w in st.session_state.pontos_semana:
+                    if w["semana"] == semana_atual:
+                        w["extras"] -= registro["pontos"]
+                        break
+                st.session_state["historico_atividades"].pop(i)
+                rerun_streamlit()
 
-    # Histórico de atividades
-    activities = st.session_state.get("activities", {})
-    with st.expander("Histórico de Atividades", expanded=st.session_state.mostrar_historico_atividade):
-        if not activities:
-            st.info("Nenhuma atividade registrada ainda.")
-        else:
-            for dia in sorted(activities.keys(), reverse=True):
-                atos = activities[dia]
-                st.markdown(f"**{dia.strftime('%d/%m/%Y')}**")
-                for idx, ato in enumerate(list(atos)):
-                    col1, col2, col3, col4 = st.columns([4, 2, 1, 1])
-                    col1.write(f"{ato['tipo']} - {ato['minutos']} min")
-                    col2.write(f"{ato['pontos']} pts")
+        # Recalcula pontos se minutos forem alterados
+        if novo_min != registro["minutos"]:
+            pontos_novos = round_points((novo_min / 15) * atividades[registro["atividade"]]["pontos"])
+            diff = pontos_novos - registro["pontos"]
+            for w in st.session_state.pontos_semana:
+                if w["semana"] == semana_atual:
+                    w["extras"] += diff
+                    semana_obj = w
+                    break
+            registro["minutos"] = novo_min
+            registro["pontos"] = pontos_novos
+            rerun_streamlit()
 
-                    # Botão Editar: permite alterar apenas os minutos, recalculando os pontos
-                    if col3.button("✏️", key=f"edit_{dia}_{idx}"):
-                        edit_key_tipo = f"edit_tipo_{dia}_{idx}"
-                        edit_key_min = f"edit_min_{dia}_{idx}"
-                        with st.expander(f"Editar atividade #{idx}", expanded=True):
-                            novo_tipo = st.selectbox(
-                                "Tipo de atividade",
-                                list(pontos_base.keys()),
-                                index=list(pontos_base.keys()).index(ato["tipo"]),
-                                key=edit_key_tipo
-                            )
-                            novo_min = st.number_input(
-                                "Duração (minutos)",
-                                min_value=1,
-                                max_value=300,
-                                value=ato["minutos"],
-                                key=edit_key_min
-                            )
-                            if st.button("Salvar alterações", key=f"save_{dia}_{idx}"):
-                                # Recalcula pontos automaticamente
-                                novo_pts = round((novo_min / minutos_base) * pontos_base.get(novo_tipo, 1), 2)
-                                
-                                # Atualiza extras da semana
-                                semana = iso_week_number(dia)
-                                ws = next((w for w in st.session_state.pontos_semana if w.get('semana') == semana), None)
-                                if ws:
-                                    ws['extras'] = max(0.0, ws.get('extras', 36.0) - float(ato['pontos']) + float(novo_pts))
-                                
-                                # Atualiza atividade
-                                st.session_state.activities[dia][idx] = {
-                                    "tipo": novo_tipo,
-                                    "minutos": novo_min,
-                                    "pontos": novo_pts
-                                }
-                                persist_all()
-                                st.success("Atividade atualizada!")
-                                st.stop()  # força atualização dinâmica do histórico
+    st.markdown("---")
+    st.write(f"💪 Pontos Extras da Semana: {semana_obj['extras']:.2f}")
 
-                    # Botão Excluir
-                    if col4.button("❌", key=f"del_{dia}_{idx}"):
-                        removed = st.session_state.activities[dia].pop(idx)
-                        # Ajusta extras da semana
-                        semana = iso_week_number(dia)
-                        ws = next((w for w in st.session_state.pontos_semana if w.get('semana') == semana), None)
-                        if ws:
-                            ws['extras'] = max(0.0, ws.get('extras', 36.0) - float(removed.get('pontos', 0)))
-                        if not st.session_state.activities[dia]:
-                            del st.session_state.activities[dia]
-                        persist_all()
-                        st.success("Atividade removida.")
-                        st.stop()  # força atualização dinâmica do histórico
+    if st.button("🔄 Resetar Atividades", use_container_width=True):
+        st.session_state["historico_atividades"] = []
+        for w in st.session_state.pontos_semana:
+            if w["semana"] == semana_atual:
+                w["extras"] = 36.0
+                semana_obj = w
+                break
+        rerun_streamlit()
 
 # -----------------------------
 # ROTAS / PAGES
