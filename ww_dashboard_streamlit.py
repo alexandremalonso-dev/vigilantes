@@ -998,34 +998,39 @@ if st.session_state.menu == "🏠 Dashboard":
             title={'text': "Pontos Consumidos"}))
         st.plotly_chart(fig1, use_container_width=True)
 
-# Pontos Extras (com atualização pelas atividades físicas da semana)
+# Pontos Extras (banco de pontos)
 with col2:
     st.markdown("### ⭐ Pontos Extras (semana)")
 
-    extras_base = 36.0  # teto inicial
+    semana_atual = iso_week_number(datetime.date.today())
+    semana_obj = next((w for w in st.session_state.pontos_semana if w["semana"] == semana_atual), None)
+    if not semana_obj:
+        semana_obj = {"semana": semana_atual, "extras": 36.0, "pontos": []}
+
+    # O “banco” de pontos extras disponível atualmente
+    banco_extras = float(semana_obj.get("extras", 36.0))
+
+    # Máximo possível, incluindo pontos ganhos por atividades
     pontos_atividade_semana = sum(
         a.get('pontos', 0.0)
         for dia_str, lst in st.session_state.activities.items()
         for a in lst
         if iso_week_number(datetime.datetime.strptime(dia_str, "%Y-%m-%d").date() if isinstance(dia_str, str) else dia_str) == semana_atual
     )
-
-    # Valor do gauge = o que realmente está disponível para o usuário
-    extras_val = float(semana_obj.get("extras", extras_base))  # já atualizado pelo rebuild
-    max_val = extras_base + pontos_atividade_semana  # teto ajustado
+    max_extras = 36.0 + pontos_atividade_semana
 
     fig2 = go.Figure(go.Indicator(
         mode="gauge+number",
-        value=extras_val,
-        number={'suffix': f" / {max_val:.0f}"},
-        gauge={'axis': {'range': [0, max_val]},
+        value=banco_extras,
+        number={'suffix': f" / {max_extras:.0f}"},
+        gauge={'axis': {'range': [0, max_extras]},
                'bar': {'color': "#006400"},
                'steps': [
-                   {'range': [0, max_val/3], 'color': "#e74c3c"},
-                   {'range': [max_val/3, 2*max_val/3], 'color': "#f1c40f"},
-                   {'range': [2*max_val/3, max_val], 'color': "#2ecc71"}
+                   {'range': [0, max_extras/3], 'color': "#e74c3c"},
+                   {'range': [max_extras/3, 2*max_extras/3], 'color': "#f1c40f"},
+                   {'range': [2*max_extras/3, max_extras], 'color': "#2ecc71"}
                ]},
-        title={'text': "Pontos Extras Disponíveis (semana)"}
+        title={'text': "Banco de Pontos Extras Disponíveis (semana)"}
     ))
     st.plotly_chart(fig2, use_container_width=True)
 
