@@ -1263,7 +1263,7 @@ def consultar_alimento():
                 rerun_streamlit()
 
 # -----------------------------
-# DASHBOARD PRINCIPAL COMPLETO COM HISTÓRICOS E GRÁFICOS
+# DASHBOARD PRINCIPAL COMPLETO COM HISTÓRICOS E GRÁFICOS (AJUSTADO)
 # -----------------------------
 import datetime
 import plotly.graph_objects as go
@@ -1273,48 +1273,62 @@ import pandas as pd
 # -----------------------------
 # Carregar dados privados do usuário e reconstruir atividades nas semanas
 # -----------------------------
-data_store = load_data(USER_DATA_FILE) or {}
-activities_store = load_data(ACTIVITY_FILE) or {}
+if st.session_state.logged_in and st.session_state.current_user:
+    USER_DATA_FILE = f"data_{st.session_state.current_user}.json"
+    ACTIVITY_FILE = f"activities_{st.session_state.current_user}.json"
 
-# Reconstruir session_state básico
-st.session_state.peso = data_store.get("peso", [])
-st.session_state.datas_peso = [
-    datetime.date.fromisoformat(d) for d in data_store.get("datas_peso", [])
-] if data_store.get("datas_peso") else []
-st.session_state.consumo_historico = data_store.get("consumo_historico", [])
-st.session_state.pontos_semana = data_store.get("pontos_semana", [])
-st.session_state.consumo_diario = float(data_store.get("consumo_diario", 0.0))
-st.session_state.meta_diaria = data_store.get("meta_diaria", 29)
-st.session_state.extras = float(data_store.get("extras", 36.0))
+    data_store = load_data(USER_DATA_FILE) or {}
+    activities_store = load_data(ACTIVITY_FILE) or {}
 
-# Garantir que cada semana tenha chave de atividades
-for w in st.session_state.pontos_semana:
-    if "atividades" not in w:
-        w["atividades"] = []
+    # Reconstruir session_state básico
+    st.session_state.peso = data_store.get("peso", [])
+    st.session_state.datas_peso = [
+        datetime.date.fromisoformat(d) for d in data_store.get("datas_peso", [])
+    ] if data_store.get("datas_peso") else []
+    st.session_state.consumo_historico = data_store.get("consumo_historico", [])
+    st.session_state.pontos_semana = data_store.get("pontos_semana", [])
+    st.session_state.consumo_diario = float(data_store.get("consumo_diario", 0.0))
+    st.session_state.meta_diaria = data_store.get("meta_diaria", 29)
+    st.session_state.extras = float(data_store.get("extras", 36.0))
 
-# Migrar atividades soltas para a semana correta
-for dia_str, lst in activities_store.items():
-    dia_obj = (
-        datetime.datetime.strptime(dia_str, "%Y-%m-%d").date()
-        if isinstance(dia_str, str)
-        else dia_str
-    )
-    semana_num = iso_week_number(dia_obj)
-    semana_obj = next((w for w in st.session_state.pontos_semana if w.get("semana") == semana_num), None)
-    if semana_obj is None:
-        semana_obj = {"semana": semana_num, "pontos": [], "extras": 36.0, "atividades": []}
-        st.session_state.pontos_semana.append(semana_obj)
-    for a in lst:
-        atividade = {
-            "tipo": a.get("tipo"),
-            "minutos": a.get("minutos", 0),
-            "pontos": a.get("pontos", 0),
-            "horario": a.get("horario", dia_obj.isoformat())
-        }
-        semana_obj["atividades"].append(atividade)
+    # Garantir que cada semana tenha chave de atividades
+    for w in st.session_state.pontos_semana:
+        if "atividades" not in w:
+            w["atividades"] = []
 
-# Limpar activities soltas (agora migradas)
-st.session_state.activities = {}
+    # Migrar atividades soltas para a semana correta
+    for dia_str, lst in activities_store.items():
+        dia_obj = (
+            datetime.datetime.strptime(dia_str, "%Y-%m-%d").date()
+            if isinstance(dia_str, str)
+            else dia_str
+        )
+        semana_num = iso_week_number(dia_obj)
+        semana_obj = next((w for w in st.session_state.pontos_semana if w.get("semana") == semana_num), None)
+        if semana_obj is None:
+            semana_obj = {"semana": semana_num, "pontos": [], "extras": 36.0, "atividades": []}
+            st.session_state.pontos_semana.append(semana_obj)
+        for a in lst:
+            atividade = {
+                "tipo": a.get("tipo"),
+                "minutos": a.get("minutos", 0),
+                "pontos": a.get("pontos", 0),
+                "horario": a.get("horario", dia_obj.isoformat())
+            }
+            semana_obj["atividades"].append(atividade)
+
+    # Limpar activities soltas (agora migradas)
+    st.session_state.activities = {}
+else:
+    # Se usuário não está logado, inicializa variáveis vazias para evitar erros
+    st.session_state.peso = st.session_state.get("peso", [])
+    st.session_state.datas_peso = st.session_state.get("datas_peso", [])
+    st.session_state.consumo_historico = st.session_state.get("consumo_historico", [])
+    st.session_state.pontos_semana = st.session_state.get("pontos_semana", [])
+    st.session_state.consumo_diario = st.session_state.get("consumo_diario", 0.0)
+    st.session_state.meta_diaria = st.session_state.get("meta_diaria", 29)
+    st.session_state.extras = st.session_state.get("extras", 36.0)
+    st.session_state.activities = st.session_state.get("activities", {})
 
 # -----------------------------
 # Dashboard
