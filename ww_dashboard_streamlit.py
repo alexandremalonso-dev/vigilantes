@@ -1241,7 +1241,10 @@ def persist_all_user():
                     for p in w.get("pontos", [])
                 ],
                 "extras": w.get("extras", 36.0),
-                "atividades": w.get("atividades", [])
+                "atividades": [
+                    {**a, "horario": a["horario"] if isinstance(a["horario"], str) else a["horario"].isoformat()}
+                    for a in w.get("atividades", [])
+                ]
             } for w in st.session_state.pontos_semana
         ]
     }
