@@ -1398,7 +1398,12 @@ if st.session_state.menu == "🏠 Dashboard":
                 y_trend = np.array(df_peso["Peso"])
                 mode_plot = "markers"
             fig_line = go.Figure(go.Scatter(x=df_peso["Data_dt"].tolist(), y=y_trend.tolist(), mode=mode_plot, line=dict(color="#8e44ad", width=3)))
-            fig_line.update_layout(yaxis_title="Peso (kg)",
+            fig_line.update_layout(yaxis_title="Peso (kg)", xaxis_title="Data", template="plotly_white")
+            st.plotly_chart(fig_line, use_container_width=True)
+        else:
+            st.warning("Erro: número de datas e pesos não coincidem.")
+    else:
+        st.info("Registre pelo menos um peso para ver a tendência.")
 
 # -----------------------------
 # FUNÇÃO DE ATIVIDADES FÍSICAS
