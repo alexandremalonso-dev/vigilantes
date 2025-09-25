@@ -1060,6 +1060,28 @@ if st.session_state.menu == "🏠 Dashboard":
         registrar_peso()
         st.stop()
 
+# -----------------------------
+# Preencher Perfil do Usuário (se não existir)
+# -----------------------------
+if not all(k in st.session_state for k in ["sexo", "idade", "altura", "objetivo", "nivel_atividade"]):
+    st.warning("⚠️ Complete seu perfil para calcular a meta diária de pontos.")
+    with st.form("form_perfil_usuario"):
+        sexo = st.selectbox("Sexo", ["M", "F"])
+        idade = st.number_input("Idade", min_value=1, max_value=120, value=30, step=1)
+        altura = st.number_input("Altura (cm)", min_value=100, max_value=250, value=170, step=1)
+        objetivo = st.selectbox("Objetivo", ["perder peso", "manter peso", "ganhar peso"])
+        nivel_atividade = st.selectbox("Nível de atividade", ["sedentário", "leve", "moderado", "ativo", "muito ativo"])
+        submitted = st.form_submit_button("Salvar Perfil")
+
+        if submitted:
+            st.session_state.sexo = sexo
+            st.session_state.idade = idade
+            st.session_state.altura = altura
+            st.session_state.objetivo = objetivo
+            st.session_state.nivel_atividade = nivel_atividade
+            st.success("Perfil salvo com sucesso!")
+            st.experimental_rerun()  # força atualização da interface
+
     # -----------------------------
     # Atualiza meta diária automaticamente
     # -----------------------------
