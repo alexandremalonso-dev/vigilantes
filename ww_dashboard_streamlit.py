@@ -1225,7 +1225,7 @@ if st.session_state.menu == "🏠 Dashboard":
         completar_perfil()
         st.stop()
 
-    # Garantir semana atual e reconstruir pontos
+    # Garantir semana atual e reconstruir pontos/atividades
     ensure_current_week_exists()
     rebuild_pontos_semana_from_history()
 
@@ -1233,10 +1233,10 @@ if st.session_state.menu == "🏠 Dashboard":
     peso_atual = st.session_state.peso[-1] if st.session_state.peso else 0.0
     semana_atual = iso_week_number(datetime.date.today())
 
-    # Garante que exista objeto da semana
+    # Objeto da semana atual
     semana_obj = next((w for w in st.session_state.pontos_semana if w.get("semana") == semana_atual), None)
     if semana_obj is None:
-        semana_obj = {"semana": semana_atual, "pontos": [], "extras": float(st.session_state.get("extras", 36.0))}
+        semana_obj = {"semana": semana_atual, "pontos": [], "extras": float(st.session_state.get("extras", 36.0)), "atividades": []}
         st.session_state.pontos_semana.append(semana_obj)
 
     st.markdown(
@@ -1273,11 +1273,12 @@ if st.session_state.menu == "🏠 Dashboard":
 
     # Pontos Extras
     with col2:
+        # Soma pontos de atividades da semana atual
         pontos_atividade_semana = sum(
             a.get('pontos', 0.0)
-            for dia_str, lst in st.session_state.get("activities", {}).items()
-            for a in lst
-            if iso_week_number(datetime.datetime.strptime(dia_str, "%Y-%m-%d").date() if isinstance(dia_str, str) else dia_str) == semana_atual
+            for w in st.session_state.pontos_semana
+            if w.get("semana") == semana_atual
+            for a in w.get("atividades", [])
         )
         extras_disponiveis = float(semana_obj.get("extras", 36.0))
         total_banco = extras_disponiveis + pontos_atividade_semana
@@ -1355,15 +1356,17 @@ if st.session_state.menu == "🏠 Dashboard":
     # Histórico de Atividades
     with col_hist2:
         st.markdown("### 🏃 Histórico de Atividades Físicas")
-        acts_list = [(d, a.get('tipo'), a.get('minutos',0), a.get('pontos',0)) 
-                     for d,lst in st.session_state.get("activities", {}).items() for a in lst]
+        acts_list = [
+            (d["horario"], d["atividade"], d["minutos"], d["pontos"])
+            for w in st.session_state.pontos_semana
+            if w.get("semana") == semana_atual
+            for d in w.get("atividades", [])
+        ]
         if acts_list:
             for d, tipo, minutos, pontos in sorted(acts_list, key=lambda x: x[0]):
-                d_str = d.strftime("%d/%m/%Y") if isinstance(d, datetime.date) else str(d)
-                dia_sem = weekday_name_br(d) if isinstance(d, datetime.date) else ""
                 st.markdown(
                     f"<div style='padding:10px; border:1px solid #1abc9c; border-radius:5px; margin-bottom:5px;'>"
-                    f"{d_str} ({dia_sem}): {tipo} - {minutos:.2f} min "
+                    f"{d}: {tipo} - {minutos:.2f} min "
                     f"<span style='color:#1f3c88'>({pontos:.2f} pts)</span>"
                     f"</div>", unsafe_allow_html=True
                 )
@@ -1397,15 +1400,8 @@ if st.session_state.menu == "🏠 Dashboard":
         if len(st.session_state.peso) == len(st.session_state.datas_peso):
             df_peso = pd.DataFrame({"Data": st.session_state.datas_peso, "Peso": st.session_state.peso})
             df_peso["Data_dt"] = pd.to_datetime(df_peso["Data"])
-            if len(df_peso) >= 2:
-                x_ord = np.array([d.toordinal() for d in df_peso["Data_dt"]])
-                y = np.array(df_peso["Peso"])
-                m, b = np.polyfit(x_ord, y, 1)
-                y_trend = m*x_ord + b
-                mode_plot = "lines+markers"
-            else:
-                y_trend = np.array(df_peso["Peso"])
-                mode_plot = "markers"
+            mode_plot = "lines+markers" if len(df_peso) >= 2 else "markers"
+            y_trend = np.array(df_peso["Peso"])
             fig_line = go.Figure(go.Scatter(
                 x=df_peso["Data_dt"].tolist(),
                 y=y_trend.tolist(),
