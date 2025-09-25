@@ -1069,7 +1069,7 @@ if st.session_state.menu == "🏠 Dashboard":
             mode="gauge+number",
             value=peso_atual,
             gauge={'axis': {'range': [min_axis, max_axis]},
-                   'bar': {'color': cor_gauge}},
+                   'bar': {'color': cor_gauge}} ,
             title={'text': f"Peso Atual {tendencia}"}
         ))
         st.plotly_chart(fig_gauge, use_container_width=True)
@@ -1130,69 +1130,48 @@ if st.session_state.menu == "🏠 Dashboard":
                 unsafe_allow_html=True
             )
 
-if st.session_state.menu == "🏠 Dashboard":
-    st.markdown("<h1 style='text-align: center; color: #2c3e50;'>🍏 Vigilantes do Peso Brasil</h1>", unsafe_allow_html=True)
-
-    # ... outros elementos do Dashboard (peso atual, consumo, extras) ...
-
     # -----------------------------
-    # Histórico de peso e pontos semanais
+    # Tendência de Peso (linha de tendência)
     # -----------------------------
-    col_hist1, col_hist2 = st.columns(2)
-    with col_hist1:
-        st.markdown("### ⚖️ Histórico de Peso")
-        # ... seu código para listar histórico ...
+    import numpy as np
+    import pandas as pd
 
-    with col_hist2:
-        st.markdown("### 📊 Pontos Semanais (últimas 4 semanas)")
-        # ... seu código para listar pontos semanais ...
+    if st.session_state.peso and st.session_state.datas_peso:
+        if len(st.session_state.peso) == len(st.session_state.datas_peso):
+            df_peso = pd.DataFrame({
+                "Data": st.session_state.datas_peso,
+                "Peso": st.session_state.peso
+            })
+            df_peso["Data_dt"] = pd.to_datetime(df_peso["Data"])
 
-# -----------------------------
-# Tendência de Peso (apenas no Dashboard)
-# -----------------------------
-import numpy as np
-import pandas as pd
+            if len(df_peso) >= 2:
+                x_ord = np.array([d.toordinal() for d in df_peso["Data_dt"]])
+                y = np.array(df_peso["Peso"])
+                m, b = np.polyfit(x_ord, y, 1)
+                y_trend = m * x_ord + b
+                mode_plot = "lines+markers"
+            else:
+                y_trend = np.array(df_peso["Peso"])
+                mode_plot = "markers"
 
-if st.session_state.peso and st.session_state.datas_peso:
-    # garantir que pesos e datas têm o mesmo tamanho
-    if len(st.session_state.peso) == len(st.session_state.datas_peso):
-        df_peso = pd.DataFrame({
-            "Data": st.session_state.datas_peso,
-            "Peso": st.session_state.peso
-        })
-        df_peso["Data_dt"] = pd.to_datetime(df_peso["Data"])
-
-        if len(df_peso) >= 2:
-            # regressão linear simples para tendência
-            x_ord = np.array([d.toordinal() for d in df_peso["Data_dt"]])
-            y = np.array(df_peso["Peso"])
-            m, b = np.polyfit(x_ord, y, 1)
-            y_trend = m * x_ord + b
-            mode_plot = "lines+markers"
-        else:
-            # apenas um ponto → marcador
-            y_trend = np.array(df_peso["Peso"])
-            mode_plot = "markers"
-
-        fig_line = go.Figure(
-            go.Scatter(
-                x=df_peso["Data_dt"].tolist(),
-                y=y_trend.tolist(),
-                mode=mode_plot,
-                line=dict(color="#8e44ad", width=3)
+            fig_line = go.Figure(
+                go.Scatter(
+                    x=df_peso["Data_dt"].tolist(),
+                    y=y_trend.tolist(),
+                    mode=mode_plot,
+                    line=dict(color="#8e44ad", width=3)
+                )
             )
-        )
-        fig_line.update_layout(
-            yaxis_title="Peso (kg)",
-            xaxis_title="Data",
-            template="plotly_white"
-        )
-        st.plotly_chart(fig_line, use_container_width=True)
+            fig_line.update_layout(
+                yaxis_title="Peso (kg)",
+                xaxis_title="Data",
+                template="plotly_white"
+            )
+            st.plotly_chart(fig_line, use_container_width=True)
+        else:
+            st.warning("Erro: número de datas e pesos não coincidem.")
     else:
-        st.warning("Erro: número de datas e pesos não coincidem.")
-else:
-    st.info("Registre pelo menos um peso para ver a tendência.")
-
+        st.info("Registre pelo menos um peso para ver a tendência.")
 
 # -----------------------------
 # FUNÇÃO DE ATIVIDADES FÍSICAS
