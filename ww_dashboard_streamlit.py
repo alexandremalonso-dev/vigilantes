@@ -1268,43 +1268,26 @@ if st.session_state.menu == "🏠 Dashboard":
             title={'text': "Pontos Consumidos"}))
         st.plotly_chart(fig1, use_container_width=True)
 
-    # Banco de Pontos Extras (integrado com código estável)
+    # Banco de Pontos Extras (cópia do código estável)
     with col2:
-        pontos_atividade_semana = 0.0
-        activities = st.session_state.get("activities", {}) or {}
-
-        for dia_key, lst in activities.items():
-            try:
-                if isinstance(dia_key, str):
-                    dia_date = datetime.datetime.strptime(dia_key, "%Y-%m-%d").date()
-                elif isinstance(dia_key, datetime.date):
-                    dia_date = dia_key
-                else:
-                    continue
-            except Exception:
-                continue
-
-            if iso_week_number(dia_date) == semana_atual:
-                for a in lst:
-                    try:
-                        pontos_atividade_semana += float(a.get("pontos", 0.0))
-                    except Exception:
-                        continue
-
+        pontos_atividade_semana = sum(
+            a.get('pontos', 0.0)
+            for dia_str, lst in st.session_state.activities.items()
+            for a in lst
+            if iso_week_number(datetime.datetime.strptime(dia_str, "%Y-%m-%d").date() if isinstance(dia_str, str) else dia_str) == semana_atual
+        )
         total_banco = 36.0 + pontos_atividade_semana
         usados = total_banco - float(semana_obj.get("extras", 36.0))
-        gauge_max = max(total_banco, 1.0)
-
         fig2 = go.Figure(go.Indicator(
             mode="gauge+number",
             value=usados,
             number={'suffix': f" / {total_banco:.0f}"},
-            gauge={'axis': {'range': [0, gauge_max]},
+            gauge={'axis': {'range': [0, total_banco]},
                    'bar': {'color': "#006400"},
                    'steps': [
-                       {'range': [0, gauge_max/3], 'color': "#e74c3c"},
-                       {'range': [gauge_max/3, 2*gauge_max/3], 'color': "#f1c40f"},
-                       {'range': [2*gauge_max/3, gauge_max], 'color': "#2ecc71"}
+                       {'range': [0, total_banco/3], 'color': "#e74c3c"},
+                       {'range': [total_banco/3, 2*total_banco/3], 'color': "#f1c40f"},
+                       {'range': [2*total_banco/3, total_banco], 'color': "#2ecc71"}
                    ]},
             title={'text': "Usado / Total (Pontos Extras)"}
         ))
