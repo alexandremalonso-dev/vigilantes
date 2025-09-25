@@ -1312,72 +1312,68 @@ def registrar_atividade_fisica():
 # -----------------------------
 import streamlit as st
 import datetime
-import tempfile
 import base64
-import webbrowser
-import os
 
 # -----------------------------
-# Função auxiliar: gerar HTML do relatório
+# Função para gerar HTML do relatório (para download)
 # -----------------------------
-def blocos_gerar_relatorio_html(consumo_filtrado, atividades_filtrado, peso_filtrado, pontos_semana, data_inicio, data_fim, incluir_consumo=True, incluir_atividades=True):
-    # Estilo CSS para tabelas
+def gerar_html_relatorio(consumo_filtrado, atividades_filtrado, peso_filtrado, pontos_semana, data_inicio, data_fim, incluir_consumo=True, incluir_atividades=True):
     css = """
     <style>
         table {border-collapse: collapse; width: 100%;}
-        th {background-color: #4CAF50; color: white; padding: 8px; text-align: left;}
+        th {background-color: #2ecc71; color: white; padding: 8px; text-align: left;}
         td {border: 1px solid #ddd; padding: 8px;}
         tr:nth-child(even){background-color: #f2f2f2;}
         h1, h2 {color: #2c3e50;}
     </style>
     """
-    
-    html_content = f"<html><head>{css}</head><body>"
-    html_content += f"<h1>Histórico Acumulado - Vigilantes do Peso</h1>"
-    html_content += f"<p>Período: {data_inicio} → {data_fim}</p>"
+    html = f"<html><head>{css}</head><body>"
+    html += f"<h1>Histórico Acumulado - Vigilantes do Peso</h1>"
+    html += f"<p>Período: {data_inicio} → {data_fim}</p>"
 
     # Pontos Semanais
-    html_content += "<h2>Pontos Semanais</h2>"
-    html_content += "<table><tr><th>Semana</th><th>Data</th><th>Nome</th><th>Quantidade</th><th>Pontos</th><th>Extras usados</th></tr>"
+    html += "<h2>Pontos Semanais</h2><table><tr><th>Semana</th><th>Data</th><th>Nome</th><th>Quantidade</th><th>Pontos</th><th>Extras usados</th></tr>"
     for w in pontos_semana:
         for r in w.get("pontos", []):
             if data_inicio <= r["data"] <= data_fim:
-                html_content += f"<tr><td>{w['semana']}</td><td>{r['data'].strftime('%d/%m/%Y')}</td><td>{r['nome']}</td><td>{r['quantidade']}</td><td>{r['pontos']}</td><td>{r.get('usou_extras',0)}</td></tr>"
-    html_content += "</table>"
+                html += f"<tr><td>{w['semana']}</td><td>{r['data'].strftime('%d/%m/%Y')}</td><td>{r['nome']}</td><td>{r['quantidade']}</td><td>{r['pontos']}</td><td>{r.get('usou_extras',0)}</td></tr>"
+    html += "</table>"
 
     # Consumo Diário
     if incluir_consumo:
-        html_content += "<h2>Consumo Diário</h2>"
-        html_content += "<table><tr><th>Data</th><th>Alimento</th><th>Quantidade (g)</th><th>Pontos</th><th>Extras usados</th></tr>"
+        html += "<h2>Consumo Diário</h2><table><tr><th>Data</th><th>Alimento</th><th>Quantidade (g)</th><th>Pontos</th><th>Extras usados</th></tr>"
         for r in consumo_filtrado:
-            html_content += f"<tr><td>{r['data'].strftime('%d/%m/%Y')}</td><td>{r['nome']}</td><td>{r['quantidade']}</td><td>{r['pontos']}</td><td>{r.get('usou_extras',0)}</td></tr>"
-        html_content += "</table>"
+            html += f"<tr><td>{r['data'].strftime('%d/%m/%Y')}</td><td>{r['nome']}</td><td>{r['quantidade']}</td><td>{r['pontos']}</td><td>{r.get('usou_extras',0)}</td></tr>"
+        html += "</table>"
 
     # Atividades Físicas
     if incluir_atividades:
-        html_content += "<h2>Atividades Físicas</h2>"
-        html_content += "<table><tr><th>Data</th><th>Tipo de Atividade</th><th>Duração (min)</th><th>Pontos</th></tr>"
+        html += "<h2>Atividades Físicas</h2><table><tr><th>Data</th><th>Tipo de Atividade</th><th>Duração (min)</th><th>Pontos</th></tr>"
         for d, lst in sorted(atividades_filtrado.items()):
             for a in lst:
-                html_content += f"<tr><td>{d.strftime('%d/%m/%Y')}</td><td>{a['tipo']}</td><td>{a['minutos']}</td><td>{a['pontos']}</td></tr>"
-        html_content += "</table>"
+                html += f"<tr><td>{d.strftime('%d/%m/%Y')}</td><td>{a['tipo']}</td><td>{a['minutos']}</td><td>{a['pontos']}</td></tr>"
+        html += "</table>"
 
     # Peso
-    html_content += "<h2>Peso</h2>"
-    html_content += "<table><tr><th>Data</th><th>Peso (kg)</th></tr>"
-    for p, d in peso_filtrado:
-        html_content += f"<tr><td>{d.strftime('%d/%m/%Y')}</td><td>{p:.2f}</td></tr>"
-    html_content += "</table>"
+    html += "<h2>Peso</h2><table><tr><th>Data</th><th>Peso (kg)</th></tr>"
+    for p,d in peso_filtrado:
+        html += f"<tr><td>{d.strftime('%d/%m/%Y')}</td><td>{p:.2f}</td></tr>"
+    html += "</table>"
 
-    html_content += "</body></html>"
+    html += "</body></html>"
+    return html
 
-    # Cria arquivo temporário HTML
-    tmp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".html")
-    tmp_file.write(html_content.encode("utf-8"))
-    tmp_file.close()
-    
-    # Abre no navegador padrão
-    webbrowser.open(f"file://{tmp_file.name}")
+# -----------------------------
+# Função para criar botão de download
+# -----------------------------
+def botao_download_html(html_content):
+    b64 = base64.b64encode(html_content.encode()).decode()
+    st.markdown(
+        f'<a href="data:text/html;base64,{b64}" download="historico_acumulado.html">'
+        f'<button style="padding:10px 20px; font-size:16px; background-color:#2ecc71; color:white; border:none; border-radius:5px; cursor:pointer;">Gerar Relatório</button>'
+        f'</a>',
+        unsafe_allow_html=True
+    )
 
 # -----------------------------
 # Página Históricos Acumulados
@@ -1390,32 +1386,53 @@ def historico_acumulado_page():
     with col2:
         data_fim = st.date_input("Data Fim", value=datetime.date.today())
     with col3:
-        gerar = st.button("📄 Gerar Relatório")
-    
+        gerar = st.button("📄 Aplicar Filtro")
+
     incluir_atividades = st.checkbox("Incluir atividades físicas", value=True)
     incluir_consumo = st.checkbox("Incluir consumo diário", value=True)
 
-    if gerar:
-        consumo_historico = st.session_state.get("consumo_historico", [])
-        pontos_semana = st.session_state.get("pontos_semana", [])
-        peso_list = st.session_state.get("peso", [])
-        datas_peso = st.session_state.get("datas_peso", [])
-        atividades = st.session_state.get("activities", {})
+    # Filtrar dados
+    consumo_historico = st.session_state.get("consumo_historico", [])
+    pontos_semana = st.session_state.get("pontos_semana", [])
+    peso_list = st.session_state.get("peso", [])
+    datas_peso = st.session_state.get("datas_peso", [])
+    atividades = st.session_state.get("activities", {})
 
-        consumo_filtrado = [r for r in consumo_historico if data_inicio <= r["data"] <= data_fim]
-        peso_filtrado = [(p,d) for p,d in zip(peso_list,datas_peso) if data_inicio <= d <= data_fim]
-        atividades_filtrado = {d: lst for d,lst in atividades.items() if data_inicio <= d <= data_fim}
+    consumo_filtrado = [r for r in consumo_historico if data_inicio <= r["data"] <= data_fim]
+    peso_filtrado = [(p,d) for p,d in zip(peso_list,datas_peso) if data_inicio <= d <= data_fim]
+    atividades_filtrado = {d: lst for d,lst in atividades.items() if data_inicio <= d <= data_fim}
 
-        blocos_gerar_relatorio_html(
-            consumo_filtrado,
-            atividades_filtrado,
-            peso_filtrado,
-            pontos_semana,
-            data_inicio,
-            data_fim,
-            incluir_consumo,
-            incluir_atividades
-        )
+    # Exibir relatório na tela como antes (tabelas Streamlit)
+    st.subheader("📊 Relatório")
+    if incluir_consumo and consumo_filtrado:
+        st.markdown("### Consumo Diário")
+        st.table([{ "Data": r["data"].strftime("%d/%m/%Y"), "Alimento": r["nome"], "Quantidade (g)": r["quantidade"], "Pontos": r["pontos"], "Extras usados": r.get("usou_extras",0) } for r in consumo_filtrado])
+
+    if incluir_atividades and atividades_filtrado:
+        st.markdown("### Atividades Físicas")
+        for d,lst in sorted(atividades_filtrado.items()):
+            st.table([{ "Data": d.strftime("%d/%m/%Y"), "Atividade": a["tipo"], "Minutos": a["minutos"], "Pontos": a["pontos"] } for a in lst])
+
+    if peso_filtrado:
+        st.markdown("### Peso")
+        st.table([{ "Data": d.strftime("%d/%m/%Y"), "Peso (kg)": p } for p,d in peso_filtrado])
+
+    if pontos_semana:
+        st.markdown("### Pontos Semanais")
+        all_points = []
+        for w in pontos_semana:
+            for r in w.get("pontos", []):
+                if data_inicio <= r["data"] <= data_fim:
+                    all_points.append({ "Semana": w["semana"], "Data": r["data"].strftime("%d/%m/%Y"), "Nome": r["nome"], "Quantidade": r["quantidade"], "Pontos": r["pontos"], "Extras usados": r.get("usou_extras",0) })
+        if all_points:
+            st.table(all_points)
+
+    # -----------------------------
+    # Botão verde para baixar HTML
+    # -----------------------------
+    html_relatorio = gerar_html_relatorio(consumo_filtrado, atividades_filtrado, peso_filtrado, pontos_semana, data_inicio, data_fim, incluir_consumo, incluir_atividades)
+    botao_download_html(html_relatorio)
+
 
 # -----------------------------
 # ROTAS / PAGES
