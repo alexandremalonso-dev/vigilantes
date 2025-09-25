@@ -1237,7 +1237,7 @@ if st.session_state.menu == "🏠 Dashboard":
     # Garante que exista objeto da semana
     semana_obj = next((w for w in st.session_state.pontos_semana if w.get("semana") == semana_atual), None)
     if semana_obj is None:
-        semana_obj = {"semana": semana_atual, "pontos": [], "extras": 36.0}
+        semana_obj = {"semana": semana_atual, "pontos": [], "extras": float(st.session_state.get("extras", 36.0))}
         st.session_state.pontos_semana.append(semana_obj)
 
     st.markdown(
@@ -1277,16 +1277,13 @@ if st.session_state.menu == "🏠 Dashboard":
             for a in lst
             if iso_week_number(datetime.datetime.strptime(dia_str, "%Y-%m-%d").date() if isinstance(dia_str, str) else dia_str) == semana_atual
         )
-        total_banco = 36.0 + pontos_atividade_semana
-        extras_disponiveis = float(semana_obj.get("extras", 36.0))
-        usados = total_banco - extras_disponiveis
 
-        # 🔹 Ajuste: barra verde completa se nada foi usado
-        valor_gauge = usados if usados > 0 else total_banco
+        total_banco = 36.0 + pontos_atividade_semana
+        usados = total_banco - float(semana_obj.get("extras", 36.0))
 
         fig2 = go.Figure(go.Indicator(
             mode="gauge+number",
-            value=valor_gauge,
+            value=usados,
             number={'suffix': f" / {total_banco:.0f}"},
             gauge={'axis': {'range': [0, total_banco]},
                    'bar': {'color': "#006400"},
