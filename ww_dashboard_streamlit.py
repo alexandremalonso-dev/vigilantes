@@ -684,14 +684,49 @@ def registrar_consumo():
                     rerun_streamlit()  # atualização imediata
 
 # -----------------------------
-# FUNÇÃO REGISTRAR PESO
+# FUNÇÃO CALCULAR META DIÁRIA
 # -----------------------------
+def calcular_meta_diaria(sexo: str, idade: int, peso: float, altura: float, objetivo: str, nivel_atividade: str) -> int:
+    """
+    Calcula a meta diária de pontos WW baseada no perfil do usuário.
+    """
+    # 1. TMB (Mifflin-St Jeor)
+    if sexo.upper() == "M":
+        tmb = 10 * peso + 6.25 * altura - 5 * idade + 5
+    else:
+        tmb = 10 * peso + 6.25 * altura - 5 * idade - 161
+
+    # 2. Ajuste pelo nível de atividade
+    atividade_fatores = {
+        "baixo": 1.2,
+        "moderado": 1.375,
+        "alto": 1.55
+    }
+    fator_atividade = atividade_fatores.get(nivel_atividade.lower(), 1.2)
+    calorias_necessarias = tmb * fator_atividade
+
+    # 3. Ajuste pelo objetivo
+    if objetivo.lower() == "perder":
+        calorias_necessarias -= 500  # déficit calórico típico
+    elif objetivo.lower() == "ganhar":
+        calorias_necessarias += 300  # leve superávit
+
+    # 4. Conversão calórica para pontos WW (aproximado)
+    pontos = round((calorias_necessarias / 2200) * 46)
+
+    # 5. Limitar faixa usual (28–36)
+    pontos = max(28, min(36, pontos))
+
+    return pontos
+
+
 # -----------------------------
-# REGISTRAR PESO AJUSTADO COM META DIÁRIA
+# FUNÇÃO REGISTRAR PESO COMPLETA
 # -----------------------------
 def registrar_peso():
     st.header("⚖️ Registrar Peso")
 
+    # Inicializa flags e listas
     if "mostrar_historico_peso" not in st.session_state:
         st.session_state.mostrar_historico_peso = False
     if "peso" not in st.session_state:
@@ -699,33 +734,35 @@ def registrar_peso():
     if "datas_peso" not in st.session_state:
         st.session_state.datas_peso = []
 
+    # Formulário para registrar peso
     with st.form("form_peso"):
-        peso_novo = st.number_input("Informe seu peso (kg):", min_value=0.0, step=0.1, format="%.2f")
-        altura = st.number_input("Altura (cm):", min_value=50, max_value=250, value=170)
-        idade = st.number_input("Idade (anos):", min_value=10, max_value=120, value=30)
-        sexo = st.selectbox("Sexo:", ["M", "F"])
-        objetivo = st.selectbox("Objetivo:", ["perder", "manter", "ganhar"])
-        nivel_atividade = st.selectbox("Nível de atividade:", ["sedentario", "leve", "moderado", "alto"], index=2)
+        peso_novo = st.number_input(
+            "Informe seu peso (kg):",
+            min_value=0.0,
+            step=0.1,
+            format="%.2f",
+            key="input_peso_reg"
+        )
         submitted = st.form_submit_button("Registrar peso")
 
         if submitted:
             st.session_state.peso.append(float(peso_novo))
             st.session_state.datas_peso.append(datetime.date.today())
 
-            # Calcula meta diária baseada no perfil do usuário
+            # Calcula meta diária automaticamente
             st.session_state.meta_diaria = calcular_meta_diaria(
+                sexo=st.session_state.sexo,
+                idade=st.session_state.idade,
                 peso=peso_novo,
-                altura=altura,
-                idade=idade,
-                sexo=sexo,
-                objetivo=objetivo,
-                nivel_atividade=nivel_atividade
+                altura=st.session_state.altura,
+                objetivo=st.session_state.objetivo,
+                nivel_atividade=st.session_state.nivel_atividade
             )
 
             persist_all()
-            st.success(f"Peso registrado: {peso_novo:.2f} kg. Meta diária WW: {st.session_state.meta_diaria} pontos")
+            st.success(f"Peso {peso_novo:.2f} kg registrado com sucesso! Meta diária: {st.session_state.meta_diaria} pts")
             st.session_state.mostrar_historico_peso = True
-            st.stop()
+            st.stop()  # força atualização dinâmica do histórico
 
     # Histórico de pesos
     with st.expander("Histórico de Pesos", expanded=st.session_state.mostrar_historico_peso):
@@ -736,8 +773,18 @@ def registrar_peso():
                 data_reg = st.session_state.datas_peso[idx]
                 peso_reg = st.session_state.peso[idx]
                 cols = st.columns([6, 1, 1])
-                cols[0].write(f"{data_reg.strftime('%d/%m/%Y')}: {peso_reg:.2f} kg")
-                
+                # Tendência
+                if idx == 0:
+                    tendencia = "➖"
+                else:
+                    if peso_reg < st.session_state.peso[idx - 1]:
+                        tendencia = "⬇️"
+                    elif peso_reg > st.session_state.peso[idx - 1]:
+                        tendencia = "⬆️"
+                    else:
+                        tendencia = "➖"
+                cols[0].write(f"{data_reg.strftime('%d/%m/%Y')}: {peso_reg:.2f} kg {tendencia}")
+
                 # Editar peso
                 if cols[1].button("Editar", key=f"edit_peso_{idx}"):
                     edit_key = f"edit_peso_input_{idx}"
@@ -752,8 +799,19 @@ def registrar_peso():
                         )
                         if st.button("Salvar alterações", key=save_key):
                             st.session_state.peso[idx] = float(new_peso)
+
+                            # Atualiza meta diária automaticamente
+                            st.session_state.meta_diaria = calcular_meta_diaria(
+                                sexo=st.session_state.sexo,
+                                idade=st.session_state.idade,
+                                peso=new_peso,
+                                altura=st.session_state.altura,
+                                objetivo=st.session_state.objetivo,
+                                nivel_atividade=st.session_state.nivel_atividade
+                            )
+
                             persist_all()
-                            st.success(f"Registro atualizado para {new_peso:.2f} kg")
+                            st.success(f"Registro atualizado para {new_peso:.2f} kg. Meta diária: {st.session_state.meta_diaria} pts")
                             st.stop()  # força atualização dinâmica do histórico
 
                 # Excluir peso
@@ -990,7 +1048,7 @@ def consultar_alimento():
                 rerun_streamlit()
 
 # -----------------------------
-# DASHBOARD PRINCIPAL - INDICADORES E HISTÓRICOS
+# DASHBOARD PRINCIPAL
 # -----------------------------
 if st.session_state.menu == "🏠 Dashboard":
     st.markdown("<h1 style='text-align: center; color: #2c3e50;'>🍏 Vigilantes do Peso Brasil</h1>", unsafe_allow_html=True)
@@ -1011,6 +1069,18 @@ if st.session_state.menu == "🏠 Dashboard":
     if not semana_obj:
         semana_obj = {"semana": semana_atual, "extras": 36.0, "pontos": []}
         st.session_state.pontos_semana.append(semana_obj)
+
+    # -----------------------------
+    # Atualiza meta diária dinamicamente com base no peso atual
+    # -----------------------------
+    st.session_state.meta_diaria = calcular_meta_diaria(
+        sexo=st.session_state.sexo,
+        idade=st.session_state.idade,
+        peso=peso_atual,
+        altura=st.session_state.altura,
+        objetivo=st.session_state.objetivo,
+        nivel_atividade=st.session_state.nivel_atividade
+    )
 
     # -----------------------------
     # Indicadores principais (gráficos)
@@ -1085,11 +1155,6 @@ if st.session_state.menu == "🏠 Dashboard":
             title={'text': f"Peso Atual {tendencia}"}
         ))
         st.plotly_chart(fig_gauge, use_container_width=True)
-
-    # -----------------------------
-    # Separador visual antes dos históricos
-    # -----------------------------
-    st.markdown("<hr style='margin-top:30px;margin-bottom:30px'>", unsafe_allow_html=True)
 
     # -----------------------------
     # Históricos (Pontos Semanais, Atividades, Peso)
@@ -1188,6 +1253,7 @@ if st.session_state.menu == "🏠 Dashboard":
             st.warning("Erro: número de datas e pesos não coincidem.")
     else:
         st.info("Registre pelo menos um peso para ver a tendência.")
+
 
 # -----------------------------
 # FUNÇÃO DE ATIVIDADES FÍSICAS
