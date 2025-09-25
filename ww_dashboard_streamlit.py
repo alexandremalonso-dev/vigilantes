@@ -1128,7 +1128,7 @@ if st.session_state.menu == "🏠 Dashboard":
         st.plotly_chart(fig_line, use_container_width=True)
 
 # -----------------------------
-# REGISTRO DE ATIVIDADES FÍSICAS
+# REGISTRAR ATIVIDADES FÍSICAS
 # -----------------------------
 def registrar_atividade_fisica():
     st.header("🏃 Atividades Físicas")
@@ -1175,7 +1175,7 @@ def registrar_atividade_fisica():
             )
 
             if st.button(f"✅ Registrar", key=f"reg_{atividade}", use_container_width=True):
-                # <-- Aqui aplicamos o round_points corretamente
+                # Ajuste do arredondamento proporcional
                 pontos_atividade = round_points((st.session_state[key_min] / 15) * info["pontos"])
                 registro = {
                     "atividade": atividade,
@@ -1189,11 +1189,11 @@ def registrar_atividade_fisica():
                 for w in st.session_state.pontos_semana:
                     if w["semana"] == semana_atual:
                         w["extras"] += pontos_atividade
-                        semana_obj = w  # garante sincronização
+                        semana_obj = w
                         break
 
                 st.success(f"{atividade} registrada: {registro['minutos']} min, {pontos_atividade} pontos")
-                rerun_streamlit()  # ⚡ atualiza imediatamente o Dashboard
+                rerun_streamlit()
 
     st.markdown("---")
     st.subheader("📜 Histórico de Atividades")
@@ -1213,7 +1213,6 @@ def registrar_atividade_fisica():
             st.write(f"Pontos: {registro['pontos']}")
         with col4:
             if st.button(f"❌ Excluir {i}"):
-                # Atualiza diretamente no session_state
                 for w in st.session_state.pontos_semana:
                     if w["semana"] == semana_atual:
                         w["extras"] -= registro["pontos"]
