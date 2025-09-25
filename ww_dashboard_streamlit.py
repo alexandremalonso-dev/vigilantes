@@ -96,7 +96,7 @@ def weekday_name_br(dt: datetime.date):
 
 
 # -----------------------------
-# LOGIN / USUÁRIOS E CARREGAMENTO DE DADOS ESTÁVEL
+# LOGIN / USUÁRIOS E CARREGAMENTO DE DADOS ESTÁVEL COM HISTÓRICOS REINTEGRADOS
 # -----------------------------
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
@@ -147,26 +147,18 @@ def login_user(email, password):
                     pass
 
         # -----------------------------
-        # Pontos semanais
+        # Pontos semanais e reconstrução de atividades (versão 113)
         # -----------------------------
         st.session_state.pontos_semana = data_store.get(
             "pontos_semana", st.session_state.get("pontos_semana", [])
         )
+
+        # Garantir que cada semana tenha chave de atividades
         for w in st.session_state.pontos_semana:
-            for p in w.get("pontos", []):
-                if isinstance(p.get("data"), str):
-                    try:
-                        p["data"] = datetime.date.fromisoformat(p["data"])
-                    except Exception:
-                        pass
-            if "extras" not in w:
-                w["extras"] = 36.0
             if "atividades" not in w:
                 w["atividades"] = []
 
-        # -----------------------------
-        # Migrar atividades soltas para semana correta
-        # -----------------------------
+        # Migrar atividades soltas para semana correta (exatamente como no dash 113)
         for dia_str, lst in activities_store.items():
             dia_obj = (
                 datetime.datetime.strptime(dia_str, "%Y-%m-%d").date()
