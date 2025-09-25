@@ -1080,60 +1080,60 @@ if st.session_state.menu == "🏠 Dashboard":
         ))
         st.plotly_chart(fig_gauge, use_container_width=True)
 
-    # -----------------------------
-    # Históricos (mantidos exatamente como antes)
-    # -----------------------------
-    col_hist1, col_hist2, col_hist3 = st.columns(3)
+# -----------------------------
+# Históricos (apenas ordem alterada)
+# -----------------------------
+col_hist1, col_hist2, col_hist3 = st.columns(3)
 
-    # Histórico de Peso
-    with col_hist1:
-        st.markdown("### ⚖️ Histórico de Peso")
-        for i, (p, d) in enumerate(zip(st.session_state.peso, st.session_state.datas_peso)):
-            if i == 0:
-                tendencia = "➖"
-            else:
-                if p < st.session_state.peso[i - 1]:
-                    tendencia = "⬇️"
-                elif p > st.session_state.peso[i - 1]:
-                    tendencia = "⬆️"
-                else:
-                    tendencia = "➖"
+# Pontos Semanais
+with col_hist1:
+    st.markdown("### 📊 Pontos Semanais")
+    all_pontos = [reg for w in st.session_state.pontos_semana for reg in w.get("pontos", [])]
+    if not all_pontos:
+        st.write(" - (sem registros)")
+    else:
+        for reg in sorted(all_pontos, key=lambda x: x["data"]):
+            dia = reg["data"].strftime("%d/%m/%Y") if isinstance(reg["data"], datetime.date) else str(reg["data"])
+            dia_sem = weekday_name_br(reg["data"]) if isinstance(reg["data"], datetime.date) else ""
+            usados = f" - usou extras: {reg.get('usou_extras',0.0):.2f} pts" if reg.get("usou_extras", 0.0) else ""
             st.markdown(
-                f"<div style='padding:10px; border:1px solid #3498db; border-radius:5px; margin-bottom:5px;'>{d.strftime('%d/%m/%Y')}: {p:.2f} kg {tendencia}</div>",
+                f"<div style='padding:10px; border:1px solid #f39c12; border-radius:5px; margin-bottom:5px;'>{dia} ({dia_sem}): {reg['nome']} {reg['quantidade']:.2f} min ({reg['pontos']:.2f} pts){usados}</div>",
                 unsafe_allow_html=True
             )
 
-    # Pontos Semanais
-    with col_hist2:
-        st.markdown("### 📊 Pontos Semanais")
-        all_pontos = [reg for w in st.session_state.pontos_semana for reg in w.get("pontos", [])]
-        if not all_pontos:
-            st.write(" - (sem registros)")
-        else:
-            for reg in sorted(all_pontos, key=lambda x: x["data"]):
-                dia = reg["data"].strftime("%d/%m/%Y") if isinstance(reg["data"], datetime.date) else str(reg["data"])
-                dia_sem = weekday_name_br(reg["data"]) if isinstance(reg["data"], datetime.date) else ""
-                usados = f" - usou extras: {reg.get('usou_extras',0.0):.2f} pts" if reg.get("usou_extras", 0.0) else ""
+# Histórico de Atividades Físicas
+with col_hist2:
+    st.markdown("### 🏃 Histórico de Atividades Físicas")
+    if st.session_state.activities:
+        acts_list = [(d, a['tipo'], a['minutos'], a['pontos']) 
+                     for d, lst in st.session_state.activities.items() for a in lst]
+        if acts_list:
+            acts_list_sorted = sorted(acts_list, key=lambda x: x[0])
+            for d, tipo, minutos, pontos in acts_list_sorted:
                 st.markdown(
-                    f"<div style='padding:10px; border:1px solid #f39c12; border-radius:5px; margin-bottom:5px;'>{dia} ({dia_sem}): {reg['nome']} {reg['quantidade']:.2f} min ({reg['pontos']:.2f} pts){usados}</div>",
+                    f"<div style='padding:10px; border:1px solid #1abc9c; border-radius:5px; margin-bottom:5px;'>{d}: {tipo} - {minutos:.2f} min ({pontos:.2f} pts)</div>",
                     unsafe_allow_html=True
                 )
+    else:
+        st.info("Nenhuma atividade registrada ainda.")
 
-    # Histórico de Atividades Físicas
-    with col_hist3:
-        st.markdown("### 🏃 Histórico de Atividades Físicas")
-        if st.session_state.activities:
-            acts_list = [(d, a['tipo'], a['minutos'], a['pontos']) 
-                         for d, lst in st.session_state.activities.items() for a in lst]
-            if acts_list:
-                acts_list_sorted = sorted(acts_list, key=lambda x: x[0])
-                for d, tipo, minutos, pontos in acts_list_sorted:
-                    st.markdown(
-                        f"<div style='padding:10px; border:1px solid #1abc9c; border-radius:5px; margin-bottom:5px;'>{d}: {tipo} - {minutos:.2f} min ({pontos:.2f} pts)</div>",
-                        unsafe_allow_html=True
-                    )
+# Histórico de Peso
+with col_hist3:
+    st.markdown("### ⚖️ Histórico de Peso")
+    for i, (p, d) in enumerate(zip(st.session_state.peso, st.session_state.datas_peso)):
+        if i == 0:
+            tendencia = "➖"
         else:
-            st.info("Nenhuma atividade registrada ainda.")
+            if p < st.session_state.peso[i - 1]:
+                tendencia = "⬇️"
+            elif p > st.session_state.peso[i - 1]:
+                tendencia = "⬆️"
+            else:
+                tendencia = "➖"
+        st.markdown(
+            f"<div style='padding:10px; border:1px solid #3498db; border-radius:5px; margin-bottom:5px;'>{d.strftime('%d/%m/%Y')}: {p:.2f} kg {tendencia}</div>",
+            unsafe_allow_html=True
+        )
 
     # -----------------------------
     # Tendência de Peso
