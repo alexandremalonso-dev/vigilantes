@@ -983,46 +983,47 @@ if st.session_state.menu == "🏠 Dashboard":
     # Consumo Diário
     with col1:
         st.markdown("### 🍽️ Consumo Diário")
+        meta_diaria = st.session_state.meta_diaria
+        consumo_diario = float(st.session_state.consumo_diario)
         fig1 = go.Figure(go.Indicator(
             mode="gauge+number",
-            value=float(st.session_state.consumo_diario),
-            gauge={'axis': {'range': [0, st.session_state.meta_diaria]},
+            value=consumo_diario,
+            number={'suffix': f" / {meta_diaria}"},
+            gauge={'axis': {'range': [0, meta_diaria]},
                    'bar': {'color': "#e74c3c"},
                    'steps': [
-                       {'range': [0, st.session_state.meta_diaria * 0.7], 'color': "#2ecc71"},
-                       {'range': [st.session_state.meta_diaria * 0.7, st.session_state.meta_diaria], 'color': "#f1c40f"}
+                       {'range': [0, meta_diaria * 0.7], 'color': "#2ecc71"},
+                       {'range': [meta_diaria * 0.7, meta_diaria], 'color': "#f1c40f"}
                    ]},
             title={'text': "Pontos Consumidos"}))
         st.plotly_chart(fig1, use_container_width=True)
 
-    # Pontos Extras (com atualização pelas atividades físicas da semana)
+    # Pontos Extras (banco de pontos)
     with col2:
-        st.markdown("### ⭐ Pontos Extras (semana)")
-
+        st.markdown("### ⭐ Banco de Pontos Extras")
+        # Total inicial + pontos ganhos por atividades
         pontos_atividade_semana = sum(
             a.get('pontos', 0.0)
             for dia_str, lst in st.session_state.activities.items()
             for a in lst
             if iso_week_number(datetime.datetime.strptime(dia_str, "%Y-%m-%d").date() if isinstance(dia_str, str) else dia_str) == semana_atual
         )
+        total_banco = 36.0 + pontos_atividade_semana
 
-        extras_val = float(semana_obj.get("extras", 36.0)) + float(pontos_atividade_semana)
-        max_val = max(36, extras_val + 2)
-        step1 = max_val / 3
-        step2 = 2 * step1
-        step3 = max_val
-
+        # Valor usado até agora
+        usados = total_banco - float(semana_obj.get("extras", 36.0))
         fig2 = go.Figure(go.Indicator(
             mode="gauge+number",
-            value=extras_val,
-            gauge={'axis': {'range': [0, max_val]},
+            value=usados,
+            number={'suffix': f" / {total_banco:.0f}"},
+            gauge={'axis': {'range': [0, total_banco]},
                    'bar': {'color': "#006400"},
                    'steps': [
-                       {'range': [0, step1], 'color': "#e74c3c"},
-                       {'range': [step1, step2], 'color': "#f1c40f"},
-                       {'range': [step2, step3], 'color': "#2ecc71"}
+                       {'range': [0, total_banco/3], 'color': "#e74c3c"},
+                       {'range': [total_banco/3, 2*total_banco/3], 'color': "#f1c40f"},
+                       {'range': [2*total_banco/3, total_banco], 'color': "#2ecc71"}
                    ]},
-            title={'text': "Pontos Extras Disponíveis (semana)"}
+            title={'text': "Usado / Total (Pontos Extras)"}
         ))
         st.plotly_chart(fig2, use_container_width=True)
 
@@ -1055,7 +1056,7 @@ if st.session_state.menu == "🏠 Dashboard":
         st.plotly_chart(fig_gauge, use_container_width=True)
 
     # -----------------------------
-    # Históricos (com cores distintas)
+    # Históricos (mantidos exatamente como antes)
     # -----------------------------
     col_hist1, col_hist2, col_hist3 = st.columns(3)
 
