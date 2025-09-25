@@ -98,13 +98,6 @@ def weekday_name_br(dt: datetime.date):
 # -----------------------------
 # LOGIN / USUÁRIOS
 # -----------------------------
-if "logged_in" not in st.session_state:
-    st.session_state.logged_in = False
-if "current_user" not in st.session_state:
-    st.session_state.current_user = ""
-
-users_store = load_data(USERS_FILE) or {}
-
 def login_user(email, password):
     if email in users_store and users_store[email]["password"] == password:
         st.session_state.logged_in = True
@@ -116,47 +109,35 @@ def login_user(email, password):
         data_store = load_data(user_data_file) or {}
         activities = load_data(activity_file) or {}
 
-        # Popular session_state imediatamente
-        st.session_state.peso = data_store.get("peso", [])
-        st.session_state.datas_peso = [
-            datetime.date.fromisoformat(d) for d in data_store.get("datas_peso", [])
-        ] if data_store.get("datas_peso") else []
-        st.session_state.consumo_historico = data_store.get("consumo_historico", [])
-        st.session_state.pontos_semana = data_store.get("pontos_semana", [])
-        st.session_state.extras = float(data_store.get("extras", 36.0))
-        st.session_state.consumo_diario = float(data_store.get("consumo_diario", 0.0))
-        st.session_state.meta_diaria = data_store.get("meta_diaria", 29)
-        st.session_state.activities = activities
-
-        # Carregar dados de perfil (se existirem)
-        st.session_state.sexo = data_store.get("sexo", "Feminino")
-        st.session_state.idade = data_store.get("idade", 30)
-        st.session_state.altura = data_store.get("altura", 1.70)
-        st.session_state.objetivo = data_store.get("objetivo", "manutenção")
-        st.session_state.nivel_atividade = data_store.get("nivel_atividade", "sedentário")
+        # Popular session_state imediatamente sem sobrescrever vazio
+        st.session_state.peso = data_store.get("peso", st.session_state.get("peso", []))
+        st.session_state.datas_peso = (
+            [datetime.date.fromisoformat(d) for d in data_store.get("datas_peso", [])]
+            if data_store.get("datas_peso")
+            else st.session_state.get("datas_peso", [])
+        )
+        st.session_state.consumo_historico = data_store.get(
+            "consumo_historico", st.session_state.get("consumo_historico", [])
+        )
+        st.session_state.pontos_semana = data_store.get(
+            "pontos_semana", st.session_state.get("pontos_semana", [])
+        )
+        st.session_state.extras = float(
+            data_store.get("extras", st.session_state.get("extras", 36.0))
+        )
+        st.session_state.consumo_diario = float(
+            data_store.get("consumo_diario", st.session_state.get("consumo_diario", 0.0))
+        )
+        st.session_state.meta_diaria = data_store.get(
+            "meta_diaria", st.session_state.get("meta_diaria", 29)
+        )
+        st.session_state.activities = activities or st.session_state.get("activities", {})
 
         st.success(f"Bem-vindo(a), {email}!")
         return True
     else:
         st.error("Email ou senha incorretos.")
         return False
-
-def register_user(email, password):
-    if email in users_store:
-        st.error("Usuário já existe!")
-        return False
-    users_store[email] = {"password": password}
-    save_data(users_store, USERS_FILE)
-    st.session_state.logged_in = True
-    st.session_state.current_user = email
-    st.session_state.primeiro_login = True  # força completar perfil após cadastro
-
-    # Cria arquivos de dados vazios ao registrar
-    save_data({}, f"data_{email}.json")
-    save_data({}, f"activities_{email}.json")
-
-    st.success(f"Cadastro realizado com sucesso! Bem-vindo(a), {email}!")
-    return True
 
 # -----------------------------
 # INTERFACE DE LOGIN
@@ -239,40 +220,48 @@ def persist_all():
     try:
         ds = {
             "peso": st.session_state.peso,
-            "datas_peso": [d.isoformat() for d in st.session_state.datas_peso],
+            "datas_peso": [
+                d.isoformat() if isinstance(d, datetime.date) else str(d)
+                for d in st.session_state.datas_peso
+            ],
             "consumo_diario": float(st.session_state.consumo_diario),
             "meta_diaria": st.session_state.meta_diaria,
             "extras": float(st.session_state.extras),
             "consumo_historico": [
                 {
-                    "data": r["data"].isoformat() if isinstance(r.get("data"), datetime.date) else str(r.get("data")),
+                    "data": (
+                        r["data"].isoformat()
+                        if isinstance(r.get("data"), datetime.date)
+                        else str(r.get("data"))
+                    ),
                     "nome": r["nome"],
                     "quantidade": r["quantidade"],
                     "pontos": r["pontos"],
-                    "usou_extras": r.get("usou_extras", 0.0)
-                } for r in st.session_state.consumo_historico
+                    "usou_extras": r.get("usou_extras", 0.0),
+                }
+                for r in st.session_state.consumo_historico
             ],
             "pontos_semana": [
                 {
                     "semana": w["semana"],
                     "pontos": [
                         {
-                            "data": p["data"].isoformat() if isinstance(p.get("data"), datetime.date) else str(p.get("data")),
+                            "data": (
+                                p["data"].isoformat()
+                                if isinstance(p.get("data"), datetime.date)
+                                else str(p.get("data"))
+                            ),
                             "nome": p["nome"],
                             "quantidade": p["quantidade"],
                             "pontos": p["pontos"],
-                            "usou_extras": p.get("usou_extras", 0.0)
-                        } for p in w.get("pontos", [])
+                            "usou_extras": p.get("usou_extras", 0.0),
+                        }
+                        for p in w.get("pontos", [])
                     ],
-                    "extras": w.get("extras", 36.0)
-                } for w in st.session_state.pontos_semana
+                    "extras": w.get("extras", 36.0),
+                }
+                for w in st.session_state.pontos_semana
             ],
-            # Perfil
-            "sexo": st.session_state.sexo,
-            "idade": st.session_state.idade,
-            "altura": st.session_state.altura,
-            "objetivo": st.session_state.objetivo,
-            "nivel_atividade": st.session_state.nivel_atividade,
         }
         save_data(ds, USER_DATA_FILE)
         save_data(st.session_state.activities, ACTIVITY_FILE)
