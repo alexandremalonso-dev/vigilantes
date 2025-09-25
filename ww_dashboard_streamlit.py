@@ -109,6 +109,25 @@ def login_user(email, password):
     if email in users_store and users_store[email]["password"] == password:
         st.session_state.logged_in = True
         st.session_state.current_user = email
+
+        # Carregar dados privados do usuário assim que logar
+        user_data_file = f"data_{email}.json"
+        activity_file = f"activities_{email}.json"
+        data_store = load_data(user_data_file) or {}
+        activities = load_data(activity_file) or {}
+
+        # Popular session_state imediatamente
+        st.session_state.peso = data_store.get("peso", [])
+        st.session_state.datas_peso = [
+            datetime.date.fromisoformat(d) for d in data_store.get("datas_peso", [])
+        ] if data_store.get("datas_peso") else []
+        st.session_state.consumo_historico = data_store.get("consumo_historico", [])
+        st.session_state.pontos_semana = data_store.get("pontos_semana", [])
+        st.session_state.extras = float(data_store.get("extras", 36.0))
+        st.session_state.consumo_diario = float(data_store.get("consumo_diario", 0.0))
+        st.session_state.meta_diaria = data_store.get("meta_diaria", 29)
+        st.session_state.activities = activities
+
         st.success(f"Bem-vindo(a), {email}!")
         return True
     else:
@@ -123,6 +142,11 @@ def register_user(email, password):
     save_data(users_store, USERS_FILE)
     st.session_state.logged_in = True
     st.session_state.current_user = email
+
+    # Cria arquivos de dados vazios ao registrar
+    save_data({}, f"data_{email}.json")
+    save_data({}, f"activities_{email}.json")
+
     st.success(f"Cadastro realizado com sucesso! Bem-vindo(a), {email}!")
     return True
 
