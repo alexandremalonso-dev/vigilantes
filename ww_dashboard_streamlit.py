@@ -1250,8 +1250,7 @@ if st.session_state.menu == "🏠 Dashboard":
     # Gráficos principais
     # -----------------------------
     col1, col2, col3 = st.columns(3, gap="large")
-
-    graf_height = 430  # aumento de 30% em relação ao tamanho anterior
+    graf_height = 430
 
     # Consumo Diário
     with col1:
@@ -1280,11 +1279,8 @@ if st.session_state.menu == "🏠 Dashboard":
             for a in lst
             if iso_week_number(datetime.datetime.strptime(dia_str, "%Y-%m-%d").date() if isinstance(dia_str, str) else dia_str) == semana_atual
         )
-
         extras_disponiveis = float(semana_obj.get("extras", 36.0))
         total_banco = extras_disponiveis + pontos_atividade_semana
-
-        # cálculo de excesso diário
         excesso_diario = max(0, st.session_state.consumo_diario - st.session_state.meta_diaria)
 
         fig2 = go.Figure(go.Indicator(
@@ -1344,15 +1340,13 @@ if st.session_state.menu == "🏠 Dashboard":
         if all_pontos:
             for reg in sorted(all_pontos, key=lambda x: x["data"]):
                 dia = reg["data"]
-                if isinstance(dia, datetime.date):
-                    dia_str = dia.strftime("%d/%m/%Y")
-                else:
-                    dia_str = str(dia)
+                dia_str = dia.strftime("%d/%m/%Y") if isinstance(dia, datetime.date) else str(dia)
                 dia_sem = weekday_name_br(dia) if isinstance(dia, datetime.date) else ""
-                usados_txt = f" - usou extras: ({reg.get('usou_extras',0.0):.2f} pts)" if reg.get("usou_extras", 0.0) else ""
+                usados_txt = f" - usou extras: ({reg.get('usou_extras',0.0):.2f} pts)" if reg.get("usou_extras",0.0) else ""
                 st.markdown(
-                    f"<div style='padding:10px; border:1px solid #f39c12; border-radius:5px; margin-bottom:5px;'>{dia_str} ({dia_sem}): {reg['nome']} {reg['quantidade']:.2f} g {usados_txt} ({reg['pontos']:.2f})</div>",
-                    unsafe_allow_html=True
+                    f"<div style='padding:10px; border:1px solid #f39c12; border-radius:5px; margin-bottom:5px;'>"
+                    f"{dia_str} ({dia_sem}): {reg['nome']} {reg['quantidade']:.2f} g <span style='color:#1f3c88'>({reg['pontos']:.2f} pts)</span>{usados_txt}"
+                    f"</div>", unsafe_allow_html=True
                 )
         else:
             st.write(" - (sem registros)")
@@ -1364,14 +1358,12 @@ if st.session_state.menu == "🏠 Dashboard":
                      for d,lst in st.session_state.get("activities", {}).items() for a in lst]
         if acts_list:
             for d, tipo, minutos, pontos in sorted(acts_list, key=lambda x: x[0]):
-                if isinstance(d, datetime.date):
-                    d_str = d.strftime("%d/%m/%Y")
-                else:
-                    d_str = str(d)
+                d_str = d.strftime("%d/%m/%Y") if isinstance(d, datetime.date) else str(d)
                 dia_sem = weekday_name_br(d) if isinstance(d, datetime.date) else ""
                 st.markdown(
-                    f"<div style='padding:10px; border:1px solid #1abc9c; border-radius:5px; margin-bottom:5px;'>{d_str} ({dia_sem}): {tipo} - {minutos:.2f} min ({pontos:.2f})</div>",
-                    unsafe_allow_html=True
+                    f"<div style='padding:10px; border:1px solid #1abc9c; border-radius:5px; margin-bottom:5px;'>"
+                    f"{d_str} ({dia_sem}): {tipo} - {minutos:.2f} min <span style='color:#1f3c88'>({pontos:.2f} pts)</span>"
+                    f"</div>", unsafe_allow_html=True
                 )
         else:
             st.info("Nenhuma atividade registrada ainda.")
@@ -1391,7 +1383,8 @@ if st.session_state.menu == "🏠 Dashboard":
                     tendencia = "➖"
             dia_sem = weekday_name_br(d)
             st.markdown(
-                f"<div style='padding:10px; border:1px solid #3498db; border-radius:5px; margin-bottom:5px;'>{d.strftime('%d/%m/%Y')} ({dia_sem}): {p:.2f} kg {tendencia}</div>",
+                f"<div style='padding:10px; border:1px solid #3498db; border-radius:5px; margin-bottom:5px;'>"
+                f"{d.strftime('%d/%m/%Y')} ({dia_sem}): {p:.2f} kg {tendencia}</div>",
                 unsafe_allow_html=True
             )
 
