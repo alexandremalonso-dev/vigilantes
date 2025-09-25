@@ -1331,6 +1331,9 @@ if st.session_state.menu == "🏠 Dashboard":
 # -----------------------------
 # Históricos
 # -----------------------------
+# -----------------------------
+# Históricos
+# -----------------------------
 col_hist1, col_hist2, col_hist3 = st.columns(3)
 
 # -----------------------------
@@ -1339,11 +1342,9 @@ col_hist1, col_hist2, col_hist3 = st.columns(3)
 with col_hist1:
     st.markdown("### 📊 Pontos Semanais")
 
-    # Juntar todos os pontos de todas as semanas
     all_pontos = []
     for semana in st.session_state.pontos_semana:
         for reg in semana.get("pontos", []):
-            # garantir que a data seja datetime.date
             dia = reg.get("data")
             if isinstance(dia, str):
                 try:
@@ -1353,7 +1354,6 @@ with col_hist1:
             all_pontos.append(reg)
 
     if all_pontos:
-        # Ordenar por data
         for reg in sorted(all_pontos, key=lambda x: x["data"]):
             dia = reg["data"]
             dia_str = dia.strftime("%d/%m/%Y") if isinstance(dia, datetime.date) else str(dia)
@@ -1368,18 +1368,24 @@ with col_hist1:
         st.write(" - (sem registros)")
 
 # -----------------------------
-# Histórico de Atividades
+# Histórico de Atividades Físicas
 # -----------------------------
 with col_hist2:
     st.markdown("### 🏃 Histórico de Atividades Físicas")
-    acts_list = []
+
+    all_atividades = []
     for semana in st.session_state.pontos_semana:
         for a in semana.get("atividades", []):
-            d = datetime.date.fromisoformat(a["horario"]) if isinstance(a["horario"], str) else a["horario"]
-            acts_list.append((d, a.get("tipo"), a.get("minutos",0), a.get("pontos",0)))
+            d = a.get("horario")
+            if isinstance(d, str):
+                try:
+                    d = datetime.date.fromisoformat(d)
+                except:
+                    d = datetime.date.today()
+            all_atividades.append((d, a.get("tipo"), a.get("minutos",0), a.get("pontos",0)))
 
-    if acts_list:
-        for d, tipo, minutos, pontos in sorted(acts_list, key=lambda x: x[0]):
+    if all_atividades:
+        for d, tipo, minutos, pontos in sorted(all_atividades, key=lambda x: x[0]):
             d_str = d.strftime("%d/%m/%Y")
             dia_sem = weekday_name_br(d)
             st.markdown(
