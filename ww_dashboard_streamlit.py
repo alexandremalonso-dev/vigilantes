@@ -1252,6 +1252,8 @@ if st.session_state.menu == "🏠 Dashboard":
     # -----------------------------
     col1, col2, col3 = st.columns(3)
 
+    graf_height = 280  # altura fixa para todos os gráficos
+
     # Consumo Diário
     with col1:
         meta_diaria = st.session_state.meta_diaria
@@ -1266,10 +1268,12 @@ if st.session_state.menu == "🏠 Dashboard":
                        {'range': [0, meta_diaria * 0.7], 'color': "#2ecc71"},
                        {'range': [meta_diaria * 0.7, meta_diaria], 'color': "#f1c40f"}
                    ]},
-            title={'text': "Pontos Consumidos"}))
+            title={'text': "Pontos Consumidos"}
+        ))
+        fig1.update_layout(height=graf_height)
         st.plotly_chart(fig1, use_container_width=True)
 
-    # Pontos Extras (estável)
+    # Pontos Extras
     with col2:
         st.markdown("### ⭐ Pontos Extras (semana)")
         pontos_atividade_semana = sum(
@@ -1278,12 +1282,16 @@ if st.session_state.menu == "🏠 Dashboard":
             for a in lst
             if iso_week_number(datetime.datetime.strptime(dia_str, "%Y-%m-%d").date() if isinstance(dia_str, str) else dia_str) == semana_atual
         )
-        total_banco = 36.0 + pontos_atividade_semana
-        usados = total_banco - float(semana_obj.get("extras", 36.0))
-        valor_gauge = usados if usados > 0 else total_banco  # barra verde cheia se não usado nenhum ponto
+
+        extras_disponiveis = float(semana_obj.get("extras", 36.0))
+        total_banco = extras_disponiveis + pontos_atividade_semana
+
+        # Calcula consumo além do limite diário
+        excesso_diario = max(0, st.session_state.consumo_diario - st.session_state.meta_diaria)
+
         fig2 = go.Figure(go.Indicator(
             mode="gauge+number",
-            value=valor_gauge,
+            value=excesso_diario,
             number={'suffix': f" / {total_banco:.0f}"},
             gauge={'axis': {'range': [0, total_banco]},
                    'bar': {'color': "#006400"},
@@ -1294,6 +1302,7 @@ if st.session_state.menu == "🏠 Dashboard":
                    ]},
             title={'text': "Usado / Total (Pontos Extras)"}
         ))
+        fig2.update_layout(height=graf_height)
         st.plotly_chart(fig2, use_container_width=True)
 
     # Peso Atual
@@ -1322,6 +1331,7 @@ if st.session_state.menu == "🏠 Dashboard":
                    'bar': {'color': cor_gauge}},
             title={'text': f"Peso Atual {tendencia}"}
         ))
+        fig_gauge.update_layout(height=graf_height)
         st.plotly_chart(fig_gauge, use_container_width=True)
 
     # -----------------------------
@@ -1338,29 +1348,21 @@ if st.session_state.menu == "🏠 Dashboard":
                 dia = reg["data"]
                 dia_str = dia.strftime("%d/%m/%Y") if isinstance(dia, datetime.date) else str(dia)
                 dia_sem = weekday_name_br(dia) if isinstance(dia, datetime.date) else ""
-                usados_txt = f" - usou extras: **{reg.get('usou_extras',0.0):.2f} pts**" if reg.get("usou_extras", 0.0) else ""
-                st.markdown(
-                    f"<div style='padding:10px; border:1px solid #f39c12; border-radius:5px; margin-bottom:5px;'>"
-                    f"{dia_str} ({dia_sem}): {reg['nome']} {reg['quantidade']:.2f} g (**{reg['pontos']:.2f} pts**){usados_txt}</div>",
-                    unsafe_allow_html=True
-                )
+                usados_txt = f" - usou extras: {reg.get('usou_extras',0.0):.2f} pts" if reg.get("usou_extras", 0.0) else ""
+                st.markdown(f"<div style='padding:10px; border:1px solid #f39c12; border-radius:5px; margin-bottom:5px;'>{dia_str} ({dia_sem}): {reg['nome']} {reg['quantidade']:.2f} g **({reg['pontos']:.2f} pts)**{usados_txt}</div>", unsafe_allow_html=True)
         else:
             st.write(" - (sem registros)")
 
-    # Histórico de Atividades Físicas
+    # Histórico de Atividades
     with col_hist2:
         st.markdown("### 🏃 Histórico de Atividades Físicas")
         acts_list = [(d, a.get('tipo'), a.get('minutos',0), a.get('pontos',0)) 
                      for d,lst in st.session_state.get("activities", {}).items() for a in lst]
         if acts_list:
             for d, tipo, minutos, pontos in sorted(acts_list, key=lambda x: x[0]):
-                dia_sem = weekday_name_br(d) if isinstance(d, datetime.date) else ""
                 d_str = d.strftime("%d/%m/%Y") if isinstance(d, datetime.date) else str(d)
-                st.markdown(
-                    f"<div style='padding:10px; border:1px solid #1abc9c; border-radius:5px; margin-bottom:5px;'>"
-                    f"{d_str} ({dia_sem}): {tipo} - {minutos:.2f} min (**{pontos:.2f} pts**)</div>",
-                    unsafe_allow_html=True
-                )
+                dia_sem = weekday_name_br(d) if isinstance(d, datetime.date) else ""
+                st.markdown(f"<div style='padding:10px; border:1px solid #1abc9c; border-radius:5px; margin-bottom:5px;'>{d_str} ({dia_sem}): {tipo} - {minutos:.2f} min **({pontos:.2f} pts)**</div>", unsafe_allow_html=True)
         else:
             st.info("Nenhuma atividade registrada ainda.")
 
@@ -1377,12 +1379,7 @@ if st.session_state.menu == "🏠 Dashboard":
                     tendencia = "⬆️"
                 else:
                     tendencia = "➖"
-            dia_sem = weekday_name_br(d) if isinstance(d, datetime.date) else ""
-            st.markdown(
-                f"<div style='padding:10px; border:1px solid #3498db; border-radius:5px; margin-bottom:5px;'>"
-                f"{d.strftime('%d/%m/%Y')} ({dia_sem}): {p:.2f} kg {tendencia}</div>",
-                unsafe_allow_html=True
-            )
+            st.markdown(f"<div style='padding:10px; border:1px solid #3498db; border-radius:5px; margin-bottom:5px;'>{d.strftime('%d/%m/%Y')} ({weekday_name_br(d)}): {p:.2f} kg {tendencia}</div>", unsafe_allow_html=True)
 
     # -----------------------------
     # Tendência de Peso (linha)
