@@ -1130,45 +1130,60 @@ if st.session_state.menu == "🏠 Dashboard":
                 unsafe_allow_html=True
             )
 
-# -----------------------------
-# Tendência de Peso (abaixo dos históricos)
-# -----------------------------
-import numpy as np
-import pandas as pd
+if st.session_state.menu == "🏠 Dashboard":
+    st.markdown("<h1 style='text-align: center; color: #2c3e50;'>🍏 Vigilantes do Peso Brasil</h1>", unsafe_allow_html=True)
 
-# criar DataFrame com datas e pesos
-df_peso = pd.DataFrame({
-    "Data": [d.isoformat() for d in st.session_state.datas_peso],
-    "Peso": st.session_state.peso
-})
-df_peso["Data_dt"] = pd.to_datetime(df_peso["Data"])
+    # ... outros elementos do Dashboard (peso atual, consumo, extras) ...
 
-if len(df_peso) >= 2:
-    # transformar datas em número ordinal para regressão
-    x_ord = np.array([d.toordinal() for d in df_peso["Data_dt"]])
-    y = np.array(df_peso["Peso"])
-    # regressão linear simples
-    m, b = np.polyfit(x_ord, y, 1)
-    y_trend = m * x_ord + b
-else:
-    y_trend = df_peso["Peso"]
+    # -----------------------------
+    # Histórico de peso e pontos semanais
+    # -----------------------------
+    col_hist1, col_hist2 = st.columns(2)
+    with col_hist1:
+        st.markdown("### ⚖️ Histórico de Peso")
+        # ... seu código para listar histórico ...
 
-fig_line = go.Figure(
-    go.Scatter(
-        x=df_peso["Data_dt"],
-        y=y_trend,
-        mode="lines",
-        line=dict(color="#8e44ad", width=3)
-    )
-)
+    with col_hist2:
+        st.markdown("### 📊 Pontos Semanais (últimas 4 semanas)")
+        # ... seu código para listar pontos semanais ...
 
-fig_line.update_layout(
-    yaxis_title="Peso (kg)",
-    xaxis_title="Data",
-    template="plotly_white"
-)
+    # -----------------------------
+    # Tendência de Peso (apenas no Dashboard)
+    # -----------------------------
+    import numpy as np
+    import pandas as pd
 
-st.plotly_chart(fig_line, use_container_width=True)
+    if st.session_state.peso:
+        df_peso = pd.DataFrame({
+            "Data": [d.isoformat() for d in st.session_state.datas_peso],
+            "Peso": st.session_state.peso
+        })
+        df_peso["Data_dt"] = pd.to_datetime(df_peso["Data"])
+
+        if len(df_peso) >= 2:
+            x_ord = np.array([d.toordinal() for d in df_peso["Data_dt"]])
+            y = np.array(df_peso["Peso"])
+            m, b = np.polyfit(x_ord, y, 1)
+            y_trend = m * x_ord + b
+        else:
+            y_trend = df_peso["Peso"]
+
+        fig_line = go.Figure(
+            go.Scatter(
+                x=df_peso["Data_dt"],
+                y=y_trend,
+                mode="lines",
+                line=dict(color="#8e44ad", width=3)
+            )
+        )
+        fig_line.update_layout(
+            yaxis_title="Peso (kg)",
+            xaxis_title="Data",
+            template="plotly_white"
+        )
+        st.plotly_chart(fig_line, use_container_width=True)
+
+
 
 
 # -----------------------------
