@@ -1307,19 +1307,33 @@ def registrar_atividade_fisica():
                         st.success("Atividade removida.")
                         st.stop()  # força atualização dinâmica do histórico
 
+# -----------------------------
+# Função Históricos Acumulados
+# -----------------------------
 import streamlit as st
 import datetime
-import pdfkit
-import tempfile
-import pandas as pd
-import plotly.graph_objects as go
+import base64
 
 # -----------------------------
-# BLOCO 1: Filtros de Período e Botões
+# Função auxiliar: gerar relatório HTML e abrir em nova aba
 # -----------------------------
-def blocos_filtros_report():
-    st.header("📅 Seleção de Período para Histórico Acumulado")
+def blocos_gerar_relatorio(html_content):
+    """
+    Gera relatório HTML e abre em nova aba do navegador ao clicar no botão.
+    """
+    st.markdown("### 📤 Gerar Relatório")
     
+    # Converte o HTML para base64
+    b64 = base64.b64encode(html_content.encode()).decode()
+    href = f'<a href="data:text/html;base64,{b64}" target="_blank"><button style="padding:10px; font-size:16px;">Gerar Relatório</button></a>'
+    st.markdown(href, unsafe_allow_html=True)
+
+# -----------------------------
+# Página Históricos Acumulados
+# -----------------------------
+def historico_acumulado_page():
+    # BLOCO 1: Filtros de período
+    st.header("📅 Seleção de Período para Histórico Acumulado")
     col1, col2, col3 = st.columns([2,2,1])
     with col1:
         data_inicio = st.date_input("Data Início", value=datetime.date.today() - datetime.timedelta(days=30))
@@ -1327,151 +1341,110 @@ def blocos_filtros_report():
         data_fim = st.date_input("Data Fim", value=datetime.date.today())
     with col3:
         gerar = st.button("📄 Gerar Report")
-    
     incluir_atividades = st.checkbox("Incluir atividades físicas", value=True)
     incluir_consumo = st.checkbox("Incluir consumo diário", value=True)
-    
-    return gerar, data_inicio, data_fim, incluir_atividades, incluir_consumo
 
-# -----------------------------
-# BLOCO 2: Indicadores Resumidos
-# -----------------------------
-def blocos_indicadores_acumulados(consumo_historico, pontos_semana, peso_list, datas_peso, atividades, data_inicio, data_fim):
-    st.markdown("### 📊 Indicadores Resumidos do Período")
-    
-    # Filtra dados
-    peso_filtrado = [(p,d) for p,d in zip(peso_list,datas_peso) if data_inicio <= d <= data_fim]
-    consumo_filtrado = [r for r in consumo_historico if data_inicio <= r["data"] <= data_fim]
-    atividades_filtrado = {d: lst for d,lst in atividades.items() if data_inicio <= d <= data_fim}
-    
-    pontos_consumidos = sum(float(r.get("pontos",0)) for r in consumo_filtrado)
-    pontos_extras_acumulados = sum(w.get("extras",36) for w in pontos_semana if any(data_inicio <= r.get("data") <= data_fim for r in w.get("pontos", [])))
-    
-    if peso_filtrado:
-        peso_inicial = peso_filtrado[0][0]
-        peso_final = peso_filtrado[-1][0]
-        if peso_final < peso_inicial:
-            tendencia = "⬇️"
-        elif peso_final > peso_inicial:
-            tendencia = "⬆️"
-        else:
-            tendencia = "➖"
-    else:
-        peso_inicial = peso_final = 0.0
-        tendencia = "➖"
-    
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Pontos Extras Acumulados", f"{pontos_extras_acumulados:.0f}")
-    col2.metric("Pontos Consumidos", f"{pontos_consumidos:.0f}")
-    col3.metric("Peso Inicial x Final", f"{peso_inicial:.1f}kg → {peso_final:.1f}kg")
-    col4.metric("Tendência Geral Peso", tendencia)
-
-# -----------------------------
-# BLOCO 3: Tabelas de Histórico Detalhado
-# -----------------------------
-def blocos_tabelas_historico(consumo_historico, pontos_semana, peso_list, datas_peso, atividades, data_inicio, data_fim, incluir_atividades=True, incluir_consumo=True):
-    st.markdown("### 🗂 Histórico Detalhado")
-
-    # Pontos Semanais
-    st.subheader("📌 Pontos Semanais")
-    for w in pontos_semana:
-        week_points = [r for r in w.get("pontos",[]) if data_inicio <= r["data"] <= data_fim]
-        if week_points:
-            st.markdown(f"**Semana {w['semana']}** — Extras Restantes: {w['extras']}")
-            for r in week_points:
-                st.write(f"{r['data'].strftime('%d/%m/%Y')}: {r['nome']} — {r['quantidade']} min — {r['pontos']} pts (usou extras: {r.get('usou_extras',0)})")
-    
-    # Consumo Diário
-    if incluir_consumo:
-        st.subheader("🍴 Consumo Diário")
-        consumo_filtrado = [r for r in consumo_historico if data_inicio <= r["data"] <= data_fim]
-        for r in consumo_filtrado:
-            st.write(f"{r['data'].strftime('%d/%m/%Y')}: {r['nome']} — {r['quantidade']} g — {r['pontos']} pts (usou extras: {r.get('usou_extras',0)})")
-    
-    # Peso
-    st.subheader("⚖️ Peso")
-    peso_filtrado = [(p,d) for p,d in zip(peso_list,datas_peso) if data_inicio <= d <= data_fim]
-    for p,d in peso_filtrado:
-        st.write(f"{d.strftime('%d/%m/%Y')}: {p:.2f} kg")
-    
-    # Atividades Físicas
-    if incluir_atividades:
-        st.subheader("🏃 Atividades Físicas")
-        atividades_filtrado = {d: lst for d,lst in atividades.items() if data_inicio <= d <= data_fim}
-        for d, lst in sorted(atividades_filtrado.items()):
-            for a in lst:
-                st.write(f"{d.strftime('%d/%m/%Y')}: {a['tipo']} — {a['minutos']} min — {a['pontos']} pts")
-
-# -----------------------------
-# BLOCO 4: Exportar PDF
-# -----------------------------
-import streamlit as st
-import tempfile
-
-def blocos_exportar_pdf(html_content, filename="historico_acumulado.html"):
-    st.markdown("### 📤 Exportar Report")
-    
-    # Cria arquivo temporário
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".html") as tmp:
-        tmp.write(html_content.encode('utf-8'))
-        tmp_path = tmp.name
-    
-    # Botão para download do HTML
-    with open(tmp_path, "rb") as f:
-        st.download_button(
-            label="🖨️ Baixar Report (HTML)",
-            data=f,
-            file_name=filename,
-            mime="text/html"
-        )
-    
-    # Opção para tentar gerar PDF apenas se pdfkit + wkhtmltopdf estiver disponível
-    try:
-        import pdfkit
-        gerar_pdf = st.button("🖨️ Gerar PDF (wkhtmltopdf necessário)")
-        if gerar_pdf:
-            try:
-                pdf_filename = filename.replace(".html", ".pdf")
-                pdfkit.from_file(tmp_path, pdf_filename)
-                with open(pdf_filename, "rb") as pdf_file:
-                    st.download_button(
-                        label="📄 Baixar PDF",
-                        data=pdf_file,
-                        file_name=pdf_filename,
-                        mime="application/pdf"
-                    )
-            except Exception as e:
-                st.error(f"Erro ao gerar PDF: {e}")
-    except ModuleNotFoundError:
-        st.info("PDF não disponível: pdfkit/wkhtmltopdf não encontrado.")
-
-
-# -----------------------------
-# FUNÇÃO PRINCIPAL: Página Históricos Acumulados
-# -----------------------------
-def historico_acumulado_page():
-    gerar, data_inicio, data_fim, incluir_atividades, incluir_consumo = blocos_filtros_report()
-    
     if gerar:
-        # Assumindo que você já tenha estas variáveis do session_state
+        # Variáveis do session_state
         consumo_historico = st.session_state.get("consumo_historico", [])
         pontos_semana = st.session_state.get("pontos_semana", [])
         peso_list = st.session_state.get("peso", [])
         datas_peso = st.session_state.get("datas_peso", [])
         atividades = st.session_state.get("activities", {})
-        
-        blocos_indicadores_acumulados(consumo_historico, pontos_semana, peso_list, datas_peso, atividades, data_inicio, data_fim)
-        blocos_tabelas_historico(consumo_historico, pontos_semana, peso_list, datas_peso, atividades, data_inicio, data_fim, incluir_atividades, incluir_consumo)
-        
-        # Montar HTML simples para exportar PDF (exemplo)
-        html_content = "<h1>Histórico Acumulado Vigilantes do Peso</h1>"
+
+        # -----------------------------
+        # BLOCO 2: Indicadores Resumidos
+        # -----------------------------
+        st.markdown("### 📊 Indicadores Resumidos do Período")
+        peso_filtrado = [(p,d) for p,d in zip(peso_list,datas_peso) if data_inicio <= d <= data_fim]
+        consumo_filtrado = [r for r in consumo_historico if data_inicio <= r["data"] <= data_fim]
+        atividades_filtrado = {d: lst for d,lst in atividades.items() if data_inicio <= d <= data_fim}
+
+        pontos_consumidos = sum(float(r.get("pontos",0)) for r in consumo_filtrado)
+        pontos_extras_acumulados = sum(w.get("extras",36) for w in pontos_semana if any(data_inicio <= r.get("data") <= data_fim for r in w.get("pontos", [])))
+
+        if peso_filtrado:
+            peso_inicial = peso_filtrado[0][0]
+            peso_final = peso_filtrado[-1][0]
+            if peso_final < peso_inicial:
+                tendencia = "⬇️"
+            elif peso_final > peso_inicial:
+                tendencia = "⬆️"
+            else:
+                tendencia = "➖"
+        else:
+            peso_inicial = peso_final = 0.0
+            tendencia = "➖"
+
+        col1, col2, col3, col4 = st.columns(4)
+        col1.metric("Pontos Extras Acumulados", f"{pontos_extras_acumulados:.0f}")
+        col2.metric("Pontos Consumidos", f"{pontos_consumidos:.0f}")
+        col3.metric("Peso Inicial x Final", f"{peso_inicial:.1f}kg → {peso_final:.1f}kg")
+        col4.metric("Tendência Geral Peso", tendencia)
+
+        # -----------------------------
+        # BLOCO 3: Tabelas de Histórico Detalhado
+        # -----------------------------
+        st.markdown("### 🗂 Histórico Detalhado")
+
+        # Pontos Semanais
+        st.subheader("📌 Pontos Semanais")
+        for w in pontos_semana:
+            week_points = [r for r in w.get("pontos",[]) if data_inicio <= r["data"] <= data_fim]
+            if week_points:
+                st.markdown(f"**Semana {w['semana']}** — Extras Restantes: {w['extras']}")
+                for r in week_points:
+                    st.write(f"{r['data'].strftime('%d/%m/%Y')}: {r['nome']} — {r['quantidade']} min — {r['pontos']} pts (usou extras: {r.get('usou_extras',0)})")
+
+        # Consumo Diário
+        if incluir_consumo:
+            st.subheader("🍴 Consumo Diário")
+            for r in consumo_filtrado:
+                st.write(f"{r['data'].strftime('%d/%m/%Y')}: {r['nome']} — {r['quantidade']} g — {r['pontos']} pts (usou extras: {r.get('usou_extras',0)})")
+
+        # Peso
+        st.subheader("⚖️ Peso")
+        for p,d in peso_filtrado:
+            st.write(f"{d.strftime('%d/%m/%Y')}: {p:.2f} kg")
+
+        # Atividades Físicas
+        if incluir_atividades:
+            st.subheader("🏃 Atividades Físicas")
+            for d, lst in sorted(atividades_filtrado.items()):
+                for a in lst:
+                    st.write(f"{d.strftime('%d/%m/%Y')}: {a['tipo']} — {a['minutos']} min — {a['pontos']} pts")
+
+        # -----------------------------
+        # BLOCO 4: Gerar Relatório HTML
+        # -----------------------------
+        # Monta conteúdo HTML simples
+        html_content = "<h1>Histórico Acumulado - Vigilantes do Peso</h1>"
         html_content += f"<p>Período: {data_inicio} → {data_fim}</p>"
-        html_content += "<ul>"
-        for r in consumo_historico:
-            if data_inicio <= r["data"] <= data_fim:
-                html_content += f"<li>{r['data']}: {r['nome']} — {r['quantidade']} g — {r['pontos']} pts</li>"
+        html_content += "<h2>Pontos Semanais</h2><ul>"
+        for w in pontos_semana:
+            for r in w.get("pontos",[]):
+                if data_inicio <= r["data"] <= data_fim:
+                    html_content += f"<li>{r['data']}: {r['nome']} — {r['quantidade']} min — {r['pontos']} pts</li>"
         html_content += "</ul>"
-        blocos_exportar_pdf(html_content)
+
+        html_content += "<h2>Consumo Diário</h2><ul>"
+        for r in consumo_filtrado:
+            html_content += f"<li>{r['data']}: {r['nome']} — {r['quantidade']} g — {r['pontos']} pts</li>"
+        html_content += "</ul>"
+
+        html_content += "<h2>Peso</h2><ul>"
+        for p,d in peso_filtrado:
+            html_content += f"<li>{d}: {p:.2f} kg</li>"
+        html_content += "</ul>"
+
+        if incluir_atividades:
+            html_content += "<h2>Atividades Físicas</h2><ul>"
+            for d, lst in sorted(atividades_filtrado.items()):
+                for a in lst:
+                    html_content += f"<li>{d}: {a['tipo']} — {a['minutos']} min — {a['pontos']} pts</li>"
+            html_content += "</ul>"
+
+        blocos_gerar_relatorio(html_content)
 
 
 # -----------------------------
