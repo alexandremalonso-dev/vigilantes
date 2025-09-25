@@ -1145,9 +1145,8 @@ def registrar_atividade_fisica():
     pontos_base = {
         "Caminhada": 1,
         "Corrida": 2,
-        "Bicicleta": 2,
-        "Academia": 2,
-        "Outro": 1
+        "Bicicleta": 2,   # ajustado para 2 pontos a cada 15 min
+        "Musculação": 2   # substitui "Academia" por "Musculação"
     }
     minutos_base = 15  # referência de 15 min
 
