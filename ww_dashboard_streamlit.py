@@ -103,12 +103,48 @@ if "logged_in" not in st.session_state:
 if "current_user" not in st.session_state:
     st.session_state.current_user = ""
 
-users_store = load_data(USERS_FILE) or {}
+# Carrega usuários globais
+USERS_FILE = "ww_users.json"
+users_store = load_data(USERS_FILE)
+if not isinstance(users_store, dict):
+    users_store = {}
 
 def login_user(email, password):
+    global users_store
     if email in users_store and users_store[email]["password"] == password:
         st.session_state.logged_in = True
         st.session_state.current_user = email
+
+        # Carregar dados privados do usuário assim que logar
+        user_data_file = f"data_{email}.json"
+        activity_file = f"activities_{email}.json"
+        data_store = load_data(user_data_file) or {}
+        activities = load_data(activity_file) or {}
+
+        # Popular session_state imediatamente sem sobrescrever vazio
+        st.session_state.peso = data_store.get("peso", st.session_state.get("peso", []))
+        st.session_state.datas_peso = (
+            [datetime.date.fromisoformat(d) for d in data_store.get("datas_peso", [])]
+            if data_store.get("datas_peso")
+            else st.session_state.get("datas_peso", [])
+        )
+        st.session_state.consumo_historico = data_store.get(
+            "consumo_historico", st.session_state.get("consumo_historico", [])
+        )
+        st.session_state.pontos_semana = data_store.get(
+            "pontos_semana", st.session_state.get("pontos_semana", [])
+        )
+        st.session_state.extras = float(
+            data_store.get("extras", st.session_state.get("extras", 36.0))
+        )
+        st.session_state.consumo_diario = float(
+            data_store.get("consumo_diario", st.session_state.get("consumo_diario", 0.0))
+        )
+        st.session_state.meta_diaria = data_store.get(
+            "meta_diaria", st.session_state.get("meta_diaria", 29)
+        )
+        st.session_state.activities = activities or st.session_state.get("activities", {})
+
         st.success(f"Bem-vindo(a), {email}!")
         return True
     else:
@@ -116,6 +152,7 @@ def login_user(email, password):
         return False
 
 def register_user(email, password):
+    global users_store
     if email in users_store:
         st.error("Usuário já existe!")
         return False
@@ -189,6 +226,13 @@ st.session_state.consumo_diario = st.session_state.get(
 st.session_state.meta_diaria = st.session_state.get("meta_diaria", data_store.get("meta_diaria", 29))
 st.session_state.activities = st.session_state.get("activities", activities)
 
+# Carregar perfil (mantém extras fora do formulário)
+st.session_state.sexo = st.session_state.get("sexo", data_store.get("sexo", "Feminino"))
+st.session_state.idade = st.session_state.get("idade", data_store.get("idade", 30))
+st.session_state.altura = st.session_state.get("altura", data_store.get("altura", 1.70))
+st.session_state.objetivo = st.session_state.get("objetivo", data_store.get("objetivo", "manutenção"))
+st.session_state.nivel_atividade = st.session_state.get("nivel_atividade", data_store.get("nivel_atividade", "sedentário"))
+
 if "menu" not in st.session_state:
     st.session_state.menu = "🏠 Dashboard"
 
@@ -200,40 +244,112 @@ def persist_all():
     try:
         ds = {
             "peso": st.session_state.peso,
-            "datas_peso": [d.isoformat() for d in st.session_state.datas_peso],
+            "datas_peso": [
+                d.isoformat() if isinstance(d, datetime.date) else str(d)
+                for d in st.session_state.datas_peso
+            ],
             "consumo_diario": float(st.session_state.consumo_diario),
             "meta_diaria": st.session_state.meta_diaria,
             "extras": float(st.session_state.extras),
             "consumo_historico": [
                 {
-                    "data": r["data"].isoformat() if isinstance(r.get("data"), datetime.date) else str(r.get("data")),
+                    "data": (
+                        r["data"].isoformat()
+                        if isinstance(r.get("data"), datetime.date)
+                        else str(r.get("data"))
+                    ),
                     "nome": r["nome"],
                     "quantidade": r["quantidade"],
                     "pontos": r["pontos"],
-                    "usou_extras": r.get("usou_extras", 0.0)
-                } for r in st.session_state.consumo_historico
+                    "usou_extras": r.get("usou_extras", 0.0),
+                }
+                for r in st.session_state.consumo_historico
             ],
             "pontos_semana": [
                 {
                     "semana": w["semana"],
                     "pontos": [
                         {
-                            "data": p["data"].isoformat() if isinstance(p.get("data"), datetime.date) else str(p.get("data")),
+                            "data": (
+                                p["data"].isoformat()
+                                if isinstance(p.get("data"), datetime.date)
+                                else str(p.get("data"))
+                            ),
                             "nome": p["nome"],
                             "quantidade": p["quantidade"],
                             "pontos": p["pontos"],
-                            "usou_extras": p.get("usou_extras", 0.0)
-                        } for p in w.get("pontos", [])
+                            "usou_extras": p.get("usou_extras", 0.0),
+                        }
+                        for p in w.get("pontos", [])
                     ],
-                    "extras": w.get("extras", 36.0)
-                } for w in st.session_state.pontos_semana
-            ]
+                    "extras": w.get("extras", 36.0),
+                }
+                for w in st.session_state.pontos_semana
+            ],
         }
         save_data(ds, USER_DATA_FILE)
         save_data(st.session_state.activities, ACTIVITY_FILE)
     except Exception as e:
         st.error(f"Erro ao persistir dados: {e}")
 
+# -----------------------------
+# FLAGS DE PRIMEIRO LOGIN E COMPLETAR PERFIL
+# -----------------------------
+if "primeiro_login" not in st.session_state:
+    st.session_state.primeiro_login = False
+
+def perfil_incompleto():
+    """Checa se o perfil está incompleto (NÃO exige campo 'extras' no formulário)."""
+    return (
+        not st.session_state.get("peso")
+        or not st.session_state.get("meta_diaria")
+        # extras já faz parte do histórico/semana — não exigir aqui
+        or not st.session_state.get("sexo")
+        or not st.session_state.get("idade")
+        or not st.session_state.get("altura")
+        or not st.session_state.get("objetivo")
+        or not st.session_state.get("nivel_atividade")
+    )
+
+# Função para completar perfil (SEM campo 'extras')
+def completar_perfil():
+    st.header("⚙️ Complete seu perfil")
+    sexo = st.selectbox("Sexo:", ["Masculino", "Feminino"], key="perfil_sexo")
+    idade = st.number_input("Idade:", min_value=10, max_value=120, step=1, key="perfil_idade")
+    altura = st.number_input("Altura (m):", min_value=1.0, max_value=2.5, step=0.01, key="perfil_altura")
+    objetivo = st.selectbox("Objetivo:", ["emagrecimento", "manutenção", "ganho"], key="perfil_objetivo")
+    nivel_atividade = st.selectbox("Nível de Atividade:", ["sedentário", "moderado", "intenso"], key="perfil_nivel")
+
+    peso_inicial = st.number_input("Peso inicial (kg):", min_value=0.0, step=0.1, key="perfil_peso")
+    # NOTA: extras NÃO está no formulário conforme solicitado (mantém valor já existente em st.session_state.extras)
+
+    if st.button("Salvar perfil", key="bot_salvar_perfil"):
+        st.session_state.peso = [peso_inicial]
+        st.session_state.datas_peso = [datetime.date.today()]
+        st.session_state.sexo = sexo
+        st.session_state.idade = idade
+        st.session_state.altura = altura
+        st.session_state.objetivo = objetivo
+        st.session_state.nivel_atividade = nivel_atividade
+
+        # Calcula meta automaticamente (usa sua função já existente)
+        try:
+            st.session_state.meta_diaria = calcular_meta_diaria(
+                sexo=sexo,
+                idade=idade,
+                peso=peso_inicial,
+                altura=altura,
+                objetivo=objetivo,
+                nivel_atividade=nivel_atividade
+            )
+        except Exception:
+            # fallback seguro
+            st.session_state.meta_diaria = st.session_state.get("meta_diaria", 29)
+
+        st.session_state.primeiro_login = False
+        persist_all()
+        st.success("Perfil salvo com sucesso!")
+        rerun_streamlit()
 
 # -----------------------------
 # FUNÇÃO RESET HISTÓRICO
@@ -262,11 +378,13 @@ def ensure_current_week_exists():
 ensure_current_week_exists()
 
 # -----------------------------
-# RECONSTRUÇÃO E RECÁLCULO (EXTRAS / DIÁRIO)
+# RECONSTRUÇÃO E RECÁLCULO (EXTRAS / DIÁRIO) COM FATOR DE PONDERAÇÃO
 # -----------------------------
 def rebuild_pontos_semana_from_history():
     meta = float(st.session_state.meta_diaria or 29.0)
+    fator_ponderacao = st.session_state.get("fator_ponderacao", 1.0)  # padrão 1.0
     weeks = {}
+
     for reg in st.session_state.consumo_historico:
         if not isinstance(reg.get("data"), datetime.date):
             try:
@@ -276,6 +394,8 @@ def rebuild_pontos_semana_from_history():
         w = iso_week_number(reg["data"])
         if w not in weeks:
             weeks[w] = {"semana": w, "pontos": [], "extras": 36.0}
+        # aplicar fator de ponderação
+        reg["pontos"] = round_points(float(reg.get("pontos", 0.0)) * fator_ponderacao)
         weeks[w]["pontos"].append(reg)
 
     sorted_week_nums = sorted(weeks.keys())
@@ -334,6 +454,7 @@ menu_itens = [
     ("➕ Cadastrar Alimento", "➕ Cadastrar novo alimento"),
     ("🔍 Consultar Alimento", "🔍 Consultar alimento"),
     ("🏃 Atividades Físicas", "🏃 Atividades Físicas"),
+    ("📊 Históricos Acumulados", "📊 Históricos Acumulados"),  # nova opção adicionada
     ("🔄 Resetar Semana", "resetar_semana"),
     ("🚪 Sair", "🚪 Sair"),
 ]
@@ -341,6 +462,7 @@ menu_itens = [
 for label, key in menu_itens:
     if st.sidebar.button(label, key=f"sidebtn_{label}", use_container_width=True):
         st.session_state.menu = key
+
 
         # -----------------------------
         # AÇÃO RESETAR SEMANA (dados do usuário)
@@ -374,14 +496,16 @@ for label, key in menu_itens:
             st.sidebar.success(f"✅ Semana {semana_atual} resetada com sucesso!")
 
         # -----------------------------
-        # AÇÃO SAIR (logout)
+        # AÇÃO SAIR (logout) - CORRIGIDA
         # -----------------------------
         elif key == "🚪 Sair":
-            # Limpa sessão de login
+            # Apenas desloga o usuário, sem apagar referência dele
             st.session_state.logged_in = False
-            st.session_state.current_user = ""
 
-            # Remove apenas dados privados do usuário
+            # ❌ NÃO apaga mais o current_user
+            # st.session_state.current_user = ""
+
+            # Remove apenas dados voláteis da sessão
             private_keys = [
                 "peso", "datas_peso", "consumo_historico",
                 "pontos_semana", "consumo_diario", "extras",
@@ -398,8 +522,7 @@ for label, key in menu_itens:
             try:
                 st.experimental_rerun()
             except Exception:
-                st.stop()  # fallback seguro no Streamlit Cloud
-
+                st.stop()  # fallback seguro
 
 # -----------------------------
 # CADASTRAR ALIMENTO AJUSTADO
@@ -657,7 +780,58 @@ def registrar_consumo():
                     rerun_streamlit()  # atualização imediata
 
 # -----------------------------
-# FUNÇÃO REGISTRAR PESO
+# FUNÇÃO CALCULAR META DIÁRIA
+# -----------------------------
+def calcular_meta_diaria(sexo, idade, peso, altura, objetivo, nivel_atividade):
+    """
+    Fórmula simplificada baseada em sexo, idade, peso, altura, objetivo e atividade.
+    Essa fórmula pode ser adaptada de acordo com o modelo oficial do WW.
+    """
+
+    # Valores base por sexo
+    if sexo.lower().startswith("m"):  # masculino
+        base = 30
+    else:  # feminino ou outros
+        base = 27
+
+    # Ajustes por idade
+    if idade < 30:
+        base += 2
+    elif idade > 60:
+        base -= 2
+
+    # Ajustes por peso
+    if peso < 60:
+        base -= 1
+    elif peso > 100:
+        base += 2
+
+    # Ajustes por altura
+    if altura > 1.80:
+        base += 1
+    elif altura < 1.60:
+        base -= 1
+
+    # Ajustes por objetivo
+    if objetivo == "emagrecimento":
+        base -= 2
+    elif objetivo == "manutenção":
+        base += 0
+    elif objetivo == "ganho":
+        base += 2
+
+    # Ajustes por nível de atividade
+    if nivel_atividade == "sedentário":
+        base -= 1
+    elif nivel_atividade == "Moderado":
+        base += 2
+    elif nivel_atividade == "Intenso":
+        base += 3
+
+    return max(18, int(base))  # nunca abaixo de 18 pontos
+
+# -----------------------------
+# FUNÇÃO REGISTRAR PESO COMPLETA
 # -----------------------------
 def registrar_peso():
     st.header("⚖️ Registrar Peso")
@@ -669,6 +843,17 @@ def registrar_peso():
         st.session_state.peso = []
     if "datas_peso" not in st.session_state:
         st.session_state.datas_peso = []
+
+    # Garante que campos do perfil existem no session_state
+    for campo, valor in {
+        "sexo": "feminino",
+        "idade": 30,
+        "altura": 1.70,
+        "objetivo": "manutenção",
+        "nivel_atividade": "sedentário"
+    }.items():
+        if campo not in st.session_state:
+            st.session_state[campo] = valor
 
     # Formulário para registrar peso
     with st.form("form_peso"):
@@ -684,11 +869,21 @@ def registrar_peso():
         if submitted:
             st.session_state.peso.append(float(peso_novo))
             st.session_state.datas_peso.append(datetime.date.today())
+
+            # Calcula meta diária automaticamente
+            st.session_state.meta_diaria = calcular_meta_diaria(
+                sexo=st.session_state.sexo,
+                idade=st.session_state.idade,
+                peso=peso_novo,
+                altura=st.session_state.altura,
+                objetivo=st.session_state.objetivo,
+                nivel_atividade=st.session_state.nivel_atividade
+            )
+
             persist_all()
-            st.success(f"Peso {peso_novo:.2f} kg registrado com sucesso!")
-            # ativa flag para exibir histórico
+            st.success(f"Peso {peso_novo:.2f} kg registrado com sucesso! Meta diária: {st.session_state.meta_diaria} pts")
             st.session_state.mostrar_historico_peso = True
-            st.stop()  # força atualização dinâmica do histórico
+            rerun_streamlit()  # força atualização dinâmica do histórico
 
     # Histórico de pesos
     with st.expander("Histórico de Pesos", expanded=st.session_state.mostrar_historico_peso):
@@ -699,8 +894,18 @@ def registrar_peso():
                 data_reg = st.session_state.datas_peso[idx]
                 peso_reg = st.session_state.peso[idx]
                 cols = st.columns([6, 1, 1])
-                cols[0].write(f"{data_reg.strftime('%d/%m/%Y')}: {peso_reg:.2f} kg")
-                
+                # Tendência
+                if idx == 0:
+                    tendencia = "➖"
+                else:
+                    if peso_reg < st.session_state.peso[idx - 1]:
+                        tendencia = "⬇️"
+                    elif peso_reg > st.session_state.peso[idx - 1]:
+                        tendencia = "⬆️"
+                    else:
+                        tendencia = "➖"
+                cols[0].write(f"{data_reg.strftime('%d/%m/%Y')}: {peso_reg:.2f} kg {tendencia}")
+
                 # Editar peso
                 if cols[1].button("Editar", key=f"edit_peso_{idx}"):
                     edit_key = f"edit_peso_input_{idx}"
@@ -715,9 +920,20 @@ def registrar_peso():
                         )
                         if st.button("Salvar alterações", key=save_key):
                             st.session_state.peso[idx] = float(new_peso)
+
+                            # Atualiza meta diária automaticamente
+                            st.session_state.meta_diaria = calcular_meta_diaria(
+                                sexo=st.session_state.sexo,
+                                idade=st.session_state.idade,
+                                peso=new_peso,
+                                altura=st.session_state.altura,
+                                objetivo=st.session_state.objetivo,
+                                nivel_atividade=st.session_state.nivel_atividade
+                            )
+
                             persist_all()
-                            st.success(f"Registro atualizado para {new_peso:.2f} kg")
-                            st.stop()  # força atualização dinâmica do histórico
+                            st.success(f"Registro atualizado para {new_peso:.2f} kg. Meta diária: {st.session_state.meta_diaria} pts")
+                            rerun_streamlit()
 
                 # Excluir peso
                 if cols[2].button("❌", key=f"del_peso_{idx}"):
@@ -725,7 +941,48 @@ def registrar_peso():
                     st.session_state.datas_peso.pop(idx)
                     persist_all()
                     st.success("Registro excluído.")
-                    st.stop()  # força atualização dinâmica do histórico
+                    rerun_streamlit()
+
+    # -----------------------------
+    # Relatório de variáveis do perfil
+    # -----------------------------
+    st.subheader("📋 Relatório do Perfil")
+    st.write(f"**Sexo:** {st.session_state.sexo}")
+    st.write(f"**Idade:** {st.session_state.idade} anos")
+    st.write(f"**Altura:** {st.session_state.altura:.2f} m")
+    st.write(f"**Objetivo:** {st.session_state.objetivo}")
+    st.write(f"**Nível de atividade:** {st.session_state.nivel_atividade}")
+    st.write(f"**Meta diária:** {st.session_state.meta_diaria} pontos")
+
+    # Botão para editar perfil direto daqui
+    with st.expander("✏️ Editar Perfil"):
+        sexo = st.selectbox("Sexo", ["feminino", "masculino"], index=0 if st.session_state.sexo == "feminino" else 1)
+        idade = st.number_input("Idade:", min_value=10, max_value=120, step=1, value=st.session_state.idade)
+        altura = st.number_input("Altura (m):", min_value=1.0, max_value=2.5, step=0.01, value=st.session_state.altura)
+        objetivo = st.selectbox("Objetivo", ["emagrecimento", "manutenção", "ganho"], index=["emagrecimento","manutenção","ganho"].index(st.session_state.objetivo))
+        nivel_atividade = st.selectbox("Nível de atividade", ["sedentário", "moderado", "ativo"], index=["sedentário","moderado","ativo"].index(st.session_state.nivel_atividade))
+
+        if st.button("Salvar Perfil", key="salvar_perfil_inline"):
+            st.session_state.sexo = sexo
+            st.session_state.idade = idade
+            st.session_state.altura = altura
+            st.session_state.objetivo = objetivo
+            st.session_state.nivel_atividade = nivel_atividade
+
+            # Recalcula meta
+            if st.session_state.peso:
+                st.session_state.meta_diaria = calcular_meta_diaria(
+                    sexo=st.session_state.sexo,
+                    idade=st.session_state.idade,
+                    peso=st.session_state.peso[-1],
+                    altura=st.session_state.altura,
+                    objetivo=st.session_state.objetivo,
+                    nivel_atividade=st.session_state.nivel_atividade
+                )
+
+            persist_all()
+            st.success("Perfil atualizado com sucesso!")
+            rerun_streamlit()
 
 # -----------------------------
 # Funções utilitárias e inicialização de alimentos
@@ -952,179 +1209,188 @@ def consultar_alimento():
                 st.success(f"Alimento '{nome_novo}' atualizado com sucesso! Pontos: {alimento['Pontos']}")
                 rerun_streamlit()
 
+
 # -----------------------------
-# DASHBOARD PRINCIPAL
+# DASHBOARD PRINCIPAL COMPLETO COM HISTÓRICOS E GRÁFICOS
 # -----------------------------
+import datetime
+import plotly.graph_objects as go
+import numpy as np
+import pandas as pd
+
 if st.session_state.menu == "🏠 Dashboard":
     st.markdown("<h1 style='text-align: center; color: #2c3e50;'>🍏 Vigilantes do Peso Brasil</h1>", unsafe_allow_html=True)
 
-    # Solicitar peso inicial se não houver
-    if not st.session_state.peso:
-        st.warning("⚖️ Por favor, registre seu peso inicial antes de usar o dashboard.")
-        registrar_peso()
+    # Primeiro login ou perfil incompleto
+    if st.session_state.primeiro_login or perfil_incompleto():
+        completar_perfil()
         st.stop()
 
-    # Garantir semana atual e recalcular a partir do histórico
+    # Garantir semana atual e reconstruir pontos
     ensure_current_week_exists()
     rebuild_pontos_semana_from_history()
 
+    # Peso atual
     peso_atual = st.session_state.peso[-1] if st.session_state.peso else 0.0
     semana_atual = iso_week_number(datetime.date.today())
-    semana_obj = next((w for w in st.session_state.pontos_semana if w["semana"] == semana_atual), None)
-    if not semana_obj:
-        semana_obj = {"semana": semana_atual, "extras": 36.0, "pontos": []}
-        st.session_state.pontos_semana.append(semana_obj)
 
-    # -----------------------------
-    # Indicadores principais
-    # -----------------------------
-    col1, col2, col3 = st.columns(3)
+    # Garante que exista objeto da semana
+    semana_obj = next((w for w in st.session_state.pontos_semana if w.get("semana") == semana_atual), None)
+    if semana_obj is None:
+        semana_obj = {"semana": semana_atual, "pontos": [], "extras": float(st.session_state.get("extras", 36.0))}
 
-    # Consumo Diário
-    with col1:
-        st.markdown("### 🍽️ Consumo Diário")
-        fig1 = go.Figure(go.Indicator(
-            mode="gauge+number",
-            value=float(st.session_state.consumo_diario),
-            gauge={'axis': {'range': [0, st.session_state.meta_diaria]},
-                   'bar': {'color': "#e74c3c"},
-                   'steps': [
-                       {'range': [0, st.session_state.meta_diaria * 0.7], 'color': "#2ecc71"},
-                       {'range': [st.session_state.meta_diaria * 0.7, st.session_state.meta_diaria], 'color': "#f1c40f"}
-                   ]},
-            title={'text': "Pontos Consumidos"}))
-        st.plotly_chart(fig1, use_container_width=True)
+    st.markdown(
+        f"<div style='background-color:#dff9fb;padding:15px;border-radius:10px;text-align:center;font-size:22px;'>"
+        f"<b>Pontos consumidos hoje: {st.session_state.consumo_diario:.2f} / {st.session_state.meta_diaria} | "
+        f"Extras disponíveis (semana): {semana_obj.get('extras', 36.0):.2f} | Peso atual: {peso_atual:.2f} kg</b>"
+        f"</div>", unsafe_allow_html=True
+    )
 
-    # Pontos Extras (com atualização pelas atividades físicas da semana)
-    with col2:
-        st.markdown("### ⭐ Pontos Extras (semana)")
+# -----------------------------
+# Gráficos principais
+# -----------------------------
+col1, col2, col3 = st.columns(3)
 
-        pontos_atividade_semana = sum(
-            a.get('pontos', 0.0)
-            for dia_str, lst in st.session_state.activities.items()
-            for a in lst
-            if iso_week_number(datetime.datetime.strptime(dia_str, "%Y-%m-%d").date() if isinstance(dia_str, str) else dia_str) == semana_atual
-        )
+# Consumo Diário
+with col1:
+    meta_diaria = st.session_state.meta_diaria
+    consumo_diario = float(st.session_state.consumo_diario)
+    fig1 = go.Figure(go.Indicator(
+        mode="gauge+number",
+        value=consumo_diario,
+        number={'suffix': f" / {meta_diaria}"},
+        gauge={'axis': {'range': [0, meta_diaria]},
+               'bar': {'color': "#e74c3c"},
+               'steps': [
+                   {'range': [0, meta_diaria * 0.7], 'color': "#2ecc71"},
+                   {'range': [meta_diaria * 0.7, meta_diaria], 'color': "#f1c40f"}
+               ]},
+        title={'text': "Pontos Consumidos"}))
+    st.plotly_chart(fig1, use_container_width=True)
 
-        extras_val = float(semana_obj.get("extras", 36.0)) + float(pontos_atividade_semana)
-        max_val = max(36, extras_val + 2)
-        step1 = max_val / 3
-        step2 = 2 * step1
-        step3 = max_val
+# Banco de Pontos Extras
+with col2:
+    pontos_atividade_semana = sum(
+        a.get('pontos', 0.0)
+        for dia_str, lst in st.session_state.activities.items()
+        for a in lst
+        if iso_week_number(datetime.datetime.strptime(dia_str, "%Y-%m-%d").date() if isinstance(dia_str, str) else dia_str) == semana_atual
+    )
+    total_banco = 36.0 + pontos_atividade_semana
+    usados = total_banco - float(semana_obj.get("extras", 36.0))
 
-        fig2 = go.Figure(go.Indicator(
-            mode="gauge+number",
-            value=extras_val,
-            gauge={'axis': {'range': [0, max_val]},
-                   'bar': {'color': "#006400"},
-                   'steps': [
-                       {'range': [0, step1], 'color': "#e74c3c"},
-                       {'range': [step1, step2], 'color': "#f1c40f"},
-                       {'range': [step2, step3], 'color': "#2ecc71"}
-                   ]},
-            title={'text': "Pontos Extras Disponíveis (semana)"}
-        ))
-        st.plotly_chart(fig2, use_container_width=True)
+    # 🔹 Ajuste: barra verde completa se nada foi usado
+    valor_gauge = usados if usados > 0 else total_banco
 
-    # Peso Atual
-    with col3:
-        st.markdown("### ⚖️ Peso Atual")
-        if len(st.session_state.peso) <= 1:
+    fig2 = go.Figure(go.Indicator(
+        mode="gauge+number",
+        value=valor_gauge,
+        number={'suffix': f" / {total_banco:.0f}"},
+        gauge={'axis': {'range': [0, total_banco]},
+               'bar': {'color': "#006400"},
+               'steps': [
+                   {'range': [0, total_banco/3], 'color': "#e74c3c"},
+                   {'range': [total_banco/3, 2*total_banco/3], 'color': "#f1c40f"},
+                   {'range': [2*total_banco/3, total_banco], 'color': "#2ecc71"}
+               ]},
+        title={'text': "Usado / Total (Pontos Extras)"}
+    ))
+    st.plotly_chart(fig2, use_container_width=True)
+
+# Peso Atual
+with col3:
+    if len(st.session_state.peso) <= 1:
+        cor_gauge = "blue"
+        tendencia = "➖"
+    else:
+        if st.session_state.peso[-1] < st.session_state.peso[-2]:
+            cor_gauge = "green"
+            tendencia = "⬇️"
+        elif st.session_state.peso[-1] > st.session_state.peso[-2]:
+            cor_gauge = "orange"
+            tendencia = "⬆️"
+        else:
             cor_gauge = "blue"
             tendencia = "➖"
+
+    peso_atual = st.session_state.peso[-1] if st.session_state.peso else 0.0
+    min_axis = min(st.session_state.peso) - 5 if st.session_state.peso else 0
+    max_axis = max(st.session_state.peso) + 5 if st.session_state.peso else 100
+    fig_gauge = go.Figure(go.Indicator(
+        mode="gauge+number",
+        value=peso_atual,
+        gauge={'axis': {'range': [min_axis, max_axis]},
+               'bar': {'color': cor_gauge}},
+        title={'text': f"Peso Atual {tendencia}"}
+    ))
+    st.plotly_chart(fig_gauge, use_container_width=True)
+
+# -----------------------------
+# Históricos
+col_hist1, col_hist2, col_hist3 = st.columns(3)
+
+    # Pontos Semanais
+    with col_hist1:
+        st.markdown("### 📊 Pontos Semanais")
+        all_pontos = [reg for w in st.session_state.pontos_semana for reg in w.get("pontos", [])]
+        if all_pontos:
+            for reg in sorted(all_pontos, key=lambda x: x["data"]):
+                dia = reg["data"].strftime("%d/%m/%Y") if isinstance(reg["data"], datetime.date) else str(reg["data"])
+                dia_sem = weekday_name_br(reg["data"]) if isinstance(reg["data"], datetime.date) else ""
+                usados_txt = f" - usou extras: {reg.get('usou_extras',0.0):.2f} pts" if reg.get("usou_extras", 0.0) else ""
+                st.markdown(f"<div style='padding:10px; border:1px solid #f39c12; border-radius:5px; margin-bottom:5px;'>{dia} ({dia_sem}): {reg['nome']} {reg['quantidade']:.2f} g ({reg['pontos']:.2f} pts){usados_txt}</div>", unsafe_allow_html=True)
         else:
-            if st.session_state.peso[-1] < st.session_state.peso[-2]:
-                cor_gauge = "green"
-                tendencia = "⬇️"
-            elif st.session_state.peso[-1] > st.session_state.peso[-2]:
-                cor_gauge = "orange"
-                tendencia = "⬆️"
-            else:
-                cor_gauge = "blue"
-                tendencia = "➖"
+            st.write(" - (sem registros)")
 
-        min_axis = min(st.session_state.peso) - 5 if st.session_state.peso else 0
-        max_axis = max(st.session_state.peso) + 5 if st.session_state.peso else 100
-        fig_gauge = go.Figure(go.Indicator(
-            mode="gauge+number",
-            value=peso_atual,
-            gauge={'axis': {'range': [min_axis, max_axis]},
-                   'bar': {'color': cor_gauge}} ,
-            title={'text': f"Peso Atual {tendencia}"}
-        ))
-        st.plotly_chart(fig_gauge, use_container_width=True)
-
-    # -----------------------------
-    # Históricos (com cores distintas)
-    # -----------------------------
-    col_hist1, col_hist2, col_hist3 = st.columns(3)
+    # Histórico de Atividades
+    with col_hist2:
+        st.markdown("### 🏃 Histórico de Atividades Físicas")
+        acts_list = [(d, a.get('tipo'), a.get('minutos',0), a.get('pontos',0)) 
+                     for d,lst in st.session_state.get("activities", {}).items() for a in lst]
+        if acts_list:
+            for d, tipo, minutos, pontos in sorted(acts_list, key=lambda x: x[0]):
+                st.markdown(f"<div style='padding:10px; border:1px solid #1abc9c; border-radius:5px; margin-bottom:5px;'>{d}: {tipo} - {minutos:.2f} min ({pontos:.2f} pts)</div>")
+        else:
+            st.info("Nenhuma atividade registrada ainda.")
 
     # Histórico de Peso
-    with col_hist1:
+    with col_hist3:
         st.markdown("### ⚖️ Histórico de Peso")
         for i, (p, d) in enumerate(zip(st.session_state.peso, st.session_state.datas_peso)):
             if i == 0:
                 tendencia = "➖"
             else:
-                if p < st.session_state.peso[i - 1]:
+                if p < st.session_state.peso[i-1]:
                     tendencia = "⬇️"
-                elif p > st.session_state.peso[i - 1]:
+                elif p > st.session_state.peso[i-1]:
                     tendencia = "⬆️"
                 else:
                     tendencia = "➖"
-            st.markdown(
-                f"<div style='padding:10px; border:1px solid #3498db; border-radius:5px; margin-bottom:5px;'>{d.strftime('%d/%m/%Y')}: {p:.2f} kg {tendencia}</div>",
-                unsafe_allow_html=True
-            )
-
-    # Pontos Semanais
-    with col_hist2:
-        st.markdown("### 📊 Pontos Semanais")
-        all_pontos = [reg for w in st.session_state.pontos_semana for reg in w.get("pontos", [])]
-        if not all_pontos:
-            st.write(" - (sem registros)")
-        else:
-            for reg in sorted(all_pontos, key=lambda x: x["data"]):
-                dia = reg["data"].strftime("%d/%m/%Y") if isinstance(reg["data"], datetime.date) else str(reg["data"])
-                dia_sem = weekday_name_br(reg["data"]) if isinstance(reg["data"], datetime.date) else ""
-                usados = f" - usou extras: {reg.get('usou_extras',0.0):.2f} pts" if reg.get("usou_extras", 0.0) else ""
-                st.markdown(
-                    f"<div style='padding:10px; border:1px solid #f39c12; border-radius:5px; margin-bottom:5px;'>{dia} ({dia_sem}): {reg['nome']} {reg['quantidade']:.2f} min ({reg['pontos']:.2f} pts){usados}</div>",
-                    unsafe_allow_html=True
-                )
-
-    # Histórico de Atividades Físicas
-    with col_hist3:
-        st.markdown("### 🏃 Histórico de Atividades Físicas")
-        if st.session_state.activities:
-            acts_list = [(d, a['tipo'], a['minutos'], a['pontos']) 
-                         for d, lst in st.session_state.activities.items() for a in lst]
-            if acts_list:
-                acts_list_sorted = sorted(acts_list, key=lambda x: x[0])
-                for d, tipo, minutos, pontos in acts_list_sorted:
-                    st.markdown(
-                        f"<div style='padding:10px; border:1px solid #1abc9c; border-radius:5px; margin-bottom:5px;'>{d}: {tipo} - {minutos:.2f} min ({pontos:.2f} pts)</div>",
-                        unsafe_allow_html=True
-                    )
-        else:
-            st.info("Nenhuma atividade registrada ainda.")
+            st.markdown(f"<div style='padding:10px; border:1px solid #3498db; border-radius:5px; margin-bottom:5px;'>{d.strftime('%d/%m/%Y')}: {p:.2f} kg {tendencia}</div>", unsafe_allow_html=True)
 
     # -----------------------------
-    # Tendência de Peso
+    # Tendência de Peso (linha)
     # -----------------------------
-    st.markdown("### 📈 Tendência de Peso")
-    if st.session_state.peso:
-        df_peso = pd.DataFrame({"Data": [d.isoformat() for d in st.session_state.datas_peso], "Peso": st.session_state.peso})
-        df_peso["Data_dt"] = pd.to_datetime(df_peso["Data"])
-        fig_line = go.Figure(go.Scatter(
-            x=list(df_peso["Data_dt"]),
-            y=list(df_peso["Peso"]),
-            mode="lines+markers",
-            line=dict(color="#8e44ad", width=3),
-            marker=dict(size=8)
-        ))
-        fig_line.update_layout(yaxis_title="Peso (kg)", xaxis_title="Data", template="plotly_white")
-        st.plotly_chart(fig_line, use_container_width=True)
+    if st.session_state.peso and st.session_state.datas_peso:
+        if len(st.session_state.peso) == len(st.session_state.datas_peso):
+            df_peso = pd.DataFrame({"Data": st.session_state.datas_peso, "Peso": st.session_state.peso})
+            df_peso["Data_dt"] = pd.to_datetime(df_peso["Data"])
+            if len(df_peso) >= 2:
+                x_ord = np.array([d.toordinal() for d in df_peso["Data_dt"]])
+                y = np.array(df_peso["Peso"])
+                m, b = np.polyfit(x_ord, y, 1)
+                y_trend = m*x_ord + b
+                mode_plot = "lines+markers"
+            else:
+                y_trend = np.array(df_peso["Peso"])
+                mode_plot = "markers"
+            fig_line = go.Figure(go.Scatter(x=df_peso["Data_dt"].tolist(), y=y_trend.tolist(), mode=mode_plot, line=dict(color="#8e44ad", width=3)))
+            fig_line.update_layout(yaxis_title="Peso (kg)", xaxis_title="Data", template="plotly_white")
+            st.plotly_chart(fig_line, use_container_width=True)
+        else:
+            st.warning("Erro: número de datas e pesos não coincidem.")
+    else:
+        st.info("Registre pelo menos um peso para ver a tendência.")
 
 # -----------------------------
 # FUNÇÃO DE ATIVIDADES FÍSICAS
@@ -1144,22 +1410,21 @@ def registrar_atividade_fisica():
     pontos_base = {
         "Caminhada": 1,
         "Corrida": 2,
-        "Bicicleta": 2,
-        "Academia": 2,
-        "Outro": 1
+        "Bicicleta": 2,   # ajustado para 2 pontos a cada 15 min
+        "Musculação": 2   # substitui "Academia" por "Musculação"
     }
     minutos_base = 15  # referência de 15 min
 
     # Formulário para registrar atividade
     with st.form("form_atividade", clear_on_submit=True):
         tipo = st.selectbox("Tipo de atividade", list(pontos_base.keys()))
-        minutos = st.number_input("Duração (minutos)", min_value=1, max_value=300, value=30)
+        minutos = st.number_input("Duração (minutos)", min_value=1, max_value=300, value=15)
         data_atividade = st.date_input("Data da atividade", value=datetime.date.today())
         submitted = st.form_submit_button("Registrar Atividade")
 
         if submitted:
-            # Calcula pontos automaticamente pela regra de 3
-            pontos = round((minutos / minutos_base) * pontos_base.get(tipo, 1), 2)
+            # Calcula pontos automaticamente pela regra de 3 com arredondamento half-up
+            pontos = round_points((minutos / minutos_base) * pontos_base.get(tipo, 1))
 
             # Adiciona atividade ao dia
             if data_atividade not in st.session_state.activities:
@@ -1226,8 +1491,8 @@ def registrar_atividade_fisica():
                                 key=edit_key_min
                             )
                             if st.button("Salvar alterações", key=f"save_{dia}_{idx}"):
-                                # Recalcula pontos automaticamente
-                                novo_pts = round((novo_min / minutos_base) * pontos_base.get(novo_tipo, 1), 2)
+                                # Recalcula pontos automaticamente com arredondamento half-up
+                                novo_pts = round_points((novo_min / minutos_base) * pontos_base.get(novo_tipo, 1))
                                 
                                 # Atualiza extras da semana
                                 semana = iso_week_number(dia)
@@ -1260,6 +1525,174 @@ def registrar_atividade_fisica():
                         st.stop()  # força atualização dinâmica do histórico
 
 # -----------------------------
+# Função Históricos Acumulados
+# -----------------------------
+import streamlit as st
+import datetime
+import base64
+
+# -----------------------------
+# Função para gerar HTML do relatório (para download)
+# -----------------------------
+def gerar_html_relatorio(consumo_filtrado, atividades_filtrado, peso_filtrado, pontos_semana, data_inicio, data_fim, incluir_consumo=True, incluir_atividades=True):
+    css = """
+    <style>
+        table {border-collapse: collapse; width: 100%;}
+        th {background-color: #2ecc71; color: white; padding: 8px; text-align: left;}
+        td {border: 1px solid #ddd; padding: 8px;}
+        tr:nth-child(even){background-color: #f2f2f2;}
+        h1, h2 {color: #2c3e50;}
+    </style>
+    """
+    html = f"<html><head>{css}</head><body>"
+    html += f"<h1>Histórico Acumulado - Vigilantes do Peso</h1>"
+    html += f"<p>Período: {data_inicio} → {data_fim}</p>"
+
+    # Pontos Semanais
+    html += "<h2>Pontos Semanais</h2><table><tr><th>Semana</th><th>Data</th><th>Nome</th><th>Quantidade</th><th>Pontos</th><th>Extras usados</th></tr>"
+    for w in pontos_semana:
+        for r in w.get("pontos", []):
+            if data_inicio <= r["data"] <= data_fim:
+                html += f"<tr><td>{w['semana']}</td><td>{r['data'].strftime('%d/%m/%Y')}</td><td>{r['nome']}</td><td>{r['quantidade']}</td><td>{r['pontos']}</td><td>{r.get('usou_extras',0)}</td></tr>"
+    html += "</table>"
+
+    # Consumo Diário
+    if incluir_consumo:
+        html += "<h2>Consumo Diário</h2><table><tr><th>Data</th><th>Alimento</th><th>Quantidade (g)</th><th>Pontos</th><th>Extras usados</th></tr>"
+        for r in consumo_filtrado:
+            html += f"<tr><td>{r['data'].strftime('%d/%m/%Y')}</td><td>{r['nome']}</td><td>{r['quantidade']}</td><td>{r['pontos']}</td><td>{r.get('usou_extras',0)}</td></tr>"
+        html += "</table>"
+
+    # Atividades Físicas
+    if incluir_atividades:
+        html += "<h2>Atividades Físicas</h2><table><tr><th>Data</th><th>Tipo de Atividade</th><th>Duração (min)</th><th>Pontos</th></tr>"
+        for d, lst in sorted(atividades_filtrado.items()):
+            for a in lst:
+                html += f"<tr><td>{d.strftime('%d/%m/%Y')}</td><td>{a['tipo']}</td><td>{a['minutos']}</td><td>{a['pontos']}</td></tr>"
+        html += "</table>"
+
+    # Peso
+    html += "<h2>Peso</h2><table><tr><th>Data</th><th>Peso (kg)</th></tr>"
+    for p,d in peso_filtrado:
+        html += f"<tr><td>{d.strftime('%d/%m/%Y')}</td><td>{p:.2f}</td></tr>"
+    html += "</table>"
+
+    html += "</body></html>"
+    return html
+
+# -----------------------------
+# Função para criar botão de download
+# -----------------------------
+def botao_download_html(html_content):
+    b64 = base64.b64encode(html_content.encode()).decode()
+    st.markdown(
+        f'<a href="data:text/html;base64,{b64}" download="historico_acumulado.html">'
+        f'<button style="padding:10px 20px; font-size:16px; background-color:#2ecc71; color:white; border:none; border-radius:5px; cursor:pointer;">Gerar Relatório</button>'
+        f'</a>',
+        unsafe_allow_html=True
+    )
+
+# -----------------------------
+# Página Históricos Acumulados
+# -----------------------------
+def historico_acumulado_page():
+    st.header("📅 Seleção de Período para Histórico Acumulado")
+    col1, col2, col3 = st.columns([2,2,1])
+    with col1:
+        data_inicio = st.date_input("Data Início", value=datetime.date.today() - datetime.timedelta(days=30))
+    with col2:
+        data_fim = st.date_input("Data Fim", value=datetime.date.today())
+    with col3:
+        gerar = st.button("📄 Aplicar Filtro")
+
+    incluir_atividades = st.checkbox("Incluir atividades físicas", value=True)
+    incluir_consumo = st.checkbox("Incluir consumo diário", value=True)
+
+    # Filtrar dados
+    consumo_historico = st.session_state.get("consumo_historico", [])
+    pontos_semana = st.session_state.get("pontos_semana", [])
+    peso_list = st.session_state.get("peso", [])
+    datas_peso = st.session_state.get("datas_peso", [])
+    atividades = st.session_state.get("activities", {})
+
+    consumo_filtrado = [r for r in consumo_historico if data_inicio <= r["data"] <= data_fim]
+    peso_filtrado = [(p,d) for p,d in zip(peso_list,datas_peso) if data_inicio <= d <= data_fim]
+    atividades_filtrado = {d: lst for d,lst in atividades.items() if data_inicio <= d <= data_fim}
+
+    # Exibir relatório na tela como antes (tabelas Streamlit)
+    st.subheader("📊 Relatório")
+    if incluir_consumo and consumo_filtrado:
+        st.markdown("### Consumo Diário")
+        st.table([{ "Data": r["data"].strftime("%d/%m/%Y"), "Alimento": r["nome"], "Quantidade (g)": r["quantidade"], "Pontos": r["pontos"], "Extras usados": r.get("usou_extras",0) } for r in consumo_filtrado])
+
+    if incluir_atividades and atividades_filtrado:
+        st.markdown("### Atividades Físicas")
+        for d,lst in sorted(atividades_filtrado.items()):
+            st.table([{ "Data": d.strftime("%d/%m/%Y"), "Atividade": a["tipo"], "Minutos": a["minutos"], "Pontos": a["pontos"] } for a in lst])
+
+    if peso_filtrado:
+        st.markdown("### Peso")
+        st.table([{ "Data": d.strftime("%d/%m/%Y"), "Peso (kg)": p } for p,d in peso_filtrado])
+
+    if pontos_semana:
+        st.markdown("### Pontos Semanais")
+        all_points = []
+        for w in pontos_semana:
+            for r in w.get("pontos", []):
+                if data_inicio <= r["data"] <= data_fim:
+                    all_points.append({ "Semana": w["semana"], "Data": r["data"].strftime("%d/%m/%Y"), "Nome": r["nome"], "Quantidade": r["quantidade"], "Pontos": r["pontos"], "Extras usados": r.get("usou_extras",0) })
+        if all_points:
+            st.table(all_points)
+
+    # -----------------------------
+    # Botão verde para baixar HTML
+    # -----------------------------
+    html_relatorio = gerar_html_relatorio(consumo_filtrado, atividades_filtrado, peso_filtrado, pontos_semana, data_inicio, data_fim, incluir_consumo, incluir_atividades)
+    botao_download_html(html_relatorio)
+
+
+# -----------------------------
+# CÁLCULO META DIÁRIA WW
+# -----------------------------
+def calcular_meta_diaria(peso, altura, idade, sexo, objetivo, nivel_atividade):
+    """
+    Retorna a meta diária de pontos do usuário (aprox. WW SmartPoints).
+    Ajuste baseado na idade, sexo, peso, altura, nível de atividade e objetivo.
+    """
+    # Fator de sexo
+    if sexo.upper() == "M":
+        sexo_factor = 5
+    else:
+        sexo_factor = -161
+
+    # Taxa metabólica basal (Mifflin-St Jeor)
+    tmb = (10 * peso) + (6.25 * altura) - (5 * idade) + sexo_factor
+
+    # Fator de atividade
+    fatores_atividade = {
+        "sedentario": 1.2,
+        "leve": 1.375,
+        "moderado": 1.55,
+        "alto": 1.725
+    }
+    tdee = tmb * fatores_atividade.get(nivel_atividade.lower(), 1.2)
+
+    # Ajuste por objetivo
+    if objetivo.lower() == "perder":
+        tdee -= 500  # déficit calórico padrão
+    elif objetivo.lower() == "ganhar":
+        tdee += 500  # superávit calórico
+
+    # Conversão aproximada calorias → pontos WW (aprox. 1 ponto ≈ 50 kcal)
+    pontos = tdee / 50.0
+
+    # Ajuste mínimo/máximo conforme WW real (~28-30)
+    pontos = max(28, min(round_points(pontos), 30))
+
+    return pontos
+
+
+# -----------------------------
 # ROTAS / PAGES
 # -----------------------------
 if st.session_state.menu == "🏠 Dashboard":
@@ -1282,6 +1715,9 @@ elif st.session_state.menu == "🔍 Consultar alimento":
 
 elif st.session_state.menu == "🏃 Atividades Físicas":
     registrar_atividade_fisica()
+
+elif st.session_state.menu == "📊 Históricos Acumulados":
+    historico_acumulado_page()  # nossa nova página de históricos
 
 elif st.session_state.menu == "🚪 Sair":
     # logout já tratado no menu lateral
