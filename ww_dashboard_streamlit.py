@@ -1333,13 +1333,17 @@ if st.session_state.menu == "🏠 Dashboard":
 # -----------------------------
 
 # -----------------------------
-# Dashboard Principal: Históricos
+# Função auxiliar: nome do dia em português
 # -----------------------------
-if st.session_state.menu == "🏠 Dashboard":
+def weekday_name_br(date_obj):
+    dias = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]
+    return dias[date_obj.weekday()]
 
-    # -----------------------------
-    # Sincronizar activities internas com pontos_semana
-    # -----------------------------
+# -----------------------------
+# Função para exibir históricos no dashboard
+# -----------------------------
+def exibir_historicos_dashboard():
+    # Garantir que session_state.activities esteja sincronizado com pontos_semana
     st.session_state.activities = {}
     for semana in st.session_state.pontos_semana:
         for a in semana.get("atividades", []):
@@ -1359,7 +1363,7 @@ if st.session_state.menu == "🏠 Dashboard":
             })
 
     # -----------------------------
-    # Colunas do dashboard
+    # Layout com colunas
     # -----------------------------
     col_hist1, col_hist2, col_hist3 = st.columns(3)
 
@@ -1378,11 +1382,12 @@ if st.session_state.menu == "🏠 Dashboard":
                     except:
                         reg["data"] = datetime.date.today()
                 all_pontos.append(reg)
+
         if all_pontos:
             for reg in sorted(all_pontos, key=lambda x: x["data"]):
                 dia = reg["data"]
                 dia_str = dia.strftime("%d/%m/%Y") if isinstance(dia, datetime.date) else str(dia)
-                dia_sem = weekday_name_br(dia) if isinstance(dia, datetime.date) else ""
+                dia_sem = weekday_name_br(dia)
                 usados_txt = f" - usou extras: ({reg.get('usou_extras',0.0):.2f} pts)" if reg.get("usou_extras",0.0) else ""
                 st.markdown(
                     f"<div style='padding:10px; border:1px solid #f39c12; border-radius:5px; margin-bottom:5px;'>"
@@ -1401,6 +1406,7 @@ if st.session_state.menu == "🏠 Dashboard":
         for d, lst in st.session_state.activities.items():
             for a in lst:
                 acts_list.append((d, a.get("tipo"), a.get("minutos",0), a.get("pontos",0)))
+
         if acts_list:
             for d, tipo, minutos, pontos in sorted(acts_list, key=lambda x: x[0]):
                 d_str = d.strftime("%d/%m/%Y")
@@ -1436,7 +1442,7 @@ if st.session_state.menu == "🏠 Dashboard":
             )
 
 # -----------------------------
-# Chamada somente no Dashboard
+# Chamada da função apenas no Dashboard
 # -----------------------------
 if st.session_state.menu == "🏠 Dashboard":
     exibir_historicos_dashboard()
