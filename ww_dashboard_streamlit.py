@@ -1340,31 +1340,9 @@ def weekday_name_br(date_obj):
     return dias[date_obj.weekday()]
 
 # -----------------------------
-# Função para exibir históricos no dashboard
+# Dashboard Principal: Históricos
 # -----------------------------
-def exibir_historicos_dashboard():
-    # Garantir que session_state.activities esteja sincronizado com pontos_semana
-    st.session_state.activities = {}
-    for semana in st.session_state.pontos_semana:
-        for a in semana.get("atividades", []):
-            d = a.get("horario")
-            if isinstance(d, str):
-                try:
-                    d = datetime.date.fromisoformat(d)
-                except:
-                    d = datetime.date.today()
-            if d not in st.session_state.activities:
-                st.session_state.activities[d] = []
-            st.session_state.activities[d].append({
-                "tipo": a.get("tipo"),
-                "minutos": a.get("minutos",0),
-                "pontos": a.get("pontos",0),
-                "horario": d
-            })
-
-    # -----------------------------
-    # Layout com colunas
-    # -----------------------------
+if st.session_state.menu == "🏠 Dashboard":
     col_hist1, col_hist2, col_hist3 = st.columns(3)
 
     # -----------------------------
@@ -1402,9 +1380,17 @@ def exibir_historicos_dashboard():
     # -----------------------------
     with col_hist2:
         st.markdown("### 🏃 Histórico de Atividades Físicas")
+
+        # Reconstruir lista de atividades a partir de pontos_semana a cada renderização
         acts_list = []
-        for d, lst in st.session_state.activities.items():
-            for a in lst:
+        for semana in st.session_state.pontos_semana:
+            for a in semana.get("atividades", []):
+                d = a.get("horario")
+                if isinstance(d, str):
+                    try:
+                        d = datetime.date.fromisoformat(d)
+                    except:
+                        d = datetime.date.today()
                 acts_list.append((d, a.get("tipo"), a.get("minutos",0), a.get("pontos",0)))
 
         if acts_list:
