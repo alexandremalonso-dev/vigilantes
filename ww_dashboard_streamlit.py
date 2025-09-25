@@ -1333,17 +1333,52 @@ if st.session_state.menu == "🏠 Dashboard":
 # -----------------------------
 
 # -----------------------------
-# Função auxiliar: nome do dia em português
+# Imports
+# -----------------------------
+import streamlit as st
+import datetime
+
+# -----------------------------
+# Função auxiliar
 # -----------------------------
 def weekday_name_br(date_obj):
     dias = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]
     return dias[date_obj.weekday()]
 
 # -----------------------------
-# Dashboard Principal: Históricos
+# Função de exibição de históricos
+# -----------------------------
+def exibir_historicos_dashboard():
+    col_hist1, col_hist2, col_hist3 = st.columns(3)
+
+    # Pontos Semanais
+    with col_hist1:
+        st.markdown("### 📊 Pontos Semanais")
+        # ... restante do código de pontos semanais ...
+
+    # Histórico de Atividades
+    with col_hist2:
+        st.markdown("### 🏃 Histórico de Atividades Físicas")
+        # ... reconstrução de atividades a partir de pontos_semana ...
+
+    # Histórico de Peso
+    with col_hist3:
+        st.markdown("### ⚖️ Histórico de Peso")
+        # ... código de peso ...
+
+# -----------------------------
+# Menu principal
 # -----------------------------
 if st.session_state.menu == "🏠 Dashboard":
-    col_hist1, col_hist2, col_hist3 = st.columns(3)
+    exibir_historicos_dashboard()
+
+# -----------------------------
+# Função auxiliar: nome do dia em português
+# -----------------------------
+def weekday_name_br(date_obj):
+    dias = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]
+    return dias[date_obj.weekday()]
+
 
     # -----------------------------
     # Pontos Semanais
