@@ -1311,32 +1311,78 @@ def registrar_atividade_fisica():
 # Função Históricos Acumulados
 # -----------------------------
 import streamlit as st
-import streamlit.components.v1 as components
 import datetime
+import tempfile
+import base64
+import webbrowser
+import os
 
 # -----------------------------
-# Função auxiliar: botão imprimir via navegador
+# Função auxiliar: gerar HTML do relatório
 # -----------------------------
-def blocos_imprimir_relatorio():
-    st.markdown("### 🖨️ Gerar Relatório")
+def blocos_gerar_relatorio_html(consumo_filtrado, atividades_filtrado, peso_filtrado, pontos_semana, data_inicio, data_fim, incluir_consumo=True, incluir_atividades=True):
+    # Estilo CSS para tabelas
+    css = """
+    <style>
+        table {border-collapse: collapse; width: 100%;}
+        th {background-color: #4CAF50; color: white; padding: 8px; text-align: left;}
+        td {border: 1px solid #ddd; padding: 8px;}
+        tr:nth-child(even){background-color: #f2f2f2;}
+        h1, h2 {color: #2c3e50;}
+    </style>
+    """
     
-    # HTML + JS via st.components.v1.html para disparar window.print()
-    components.html(
-        """
-        <button 
-            style="padding:10px 20px; font-size:16px; background-color:#2ecc71; color:white; border:none; border-radius:5px; cursor:pointer;"
-            onclick="window.print()">
-            Gerar Relatório
-        </button>
-        """,
-        height=60,  # altura mínima para o botão
-    )
+    html_content = f"<html><head>{css}</head><body>"
+    html_content += f"<h1>Histórico Acumulado - Vigilantes do Peso</h1>"
+    html_content += f"<p>Período: {data_inicio} → {data_fim}</p>"
+
+    # Pontos Semanais
+    html_content += "<h2>Pontos Semanais</h2>"
+    html_content += "<table><tr><th>Semana</th><th>Data</th><th>Nome</th><th>Quantidade</th><th>Pontos</th><th>Extras usados</th></tr>"
+    for w in pontos_semana:
+        for r in w.get("pontos", []):
+            if data_inicio <= r["data"] <= data_fim:
+                html_content += f"<tr><td>{w['semana']}</td><td>{r['data'].strftime('%d/%m/%Y')}</td><td>{r['nome']}</td><td>{r['quantidade']}</td><td>{r['pontos']}</td><td>{r.get('usou_extras',0)}</td></tr>"
+    html_content += "</table>"
+
+    # Consumo Diário
+    if incluir_consumo:
+        html_content += "<h2>Consumo Diário</h2>"
+        html_content += "<table><tr><th>Data</th><th>Alimento</th><th>Quantidade (g)</th><th>Pontos</th><th>Extras usados</th></tr>"
+        for r in consumo_filtrado:
+            html_content += f"<tr><td>{r['data'].strftime('%d/%m/%Y')}</td><td>{r['nome']}</td><td>{r['quantidade']}</td><td>{r['pontos']}</td><td>{r.get('usou_extras',0)}</td></tr>"
+        html_content += "</table>"
+
+    # Atividades Físicas
+    if incluir_atividades:
+        html_content += "<h2>Atividades Físicas</h2>"
+        html_content += "<table><tr><th>Data</th><th>Tipo de Atividade</th><th>Duração (min)</th><th>Pontos</th></tr>"
+        for d, lst in sorted(atividades_filtrado.items()):
+            for a in lst:
+                html_content += f"<tr><td>{d.strftime('%d/%m/%Y')}</td><td>{a['tipo']}</td><td>{a['minutos']}</td><td>{a['pontos']}</td></tr>"
+        html_content += "</table>"
+
+    # Peso
+    html_content += "<h2>Peso</h2>"
+    html_content += "<table><tr><th>Data</th><th>Peso (kg)</th></tr>"
+    for p, d in peso_filtrado:
+        html_content += f"<tr><td>{d.strftime('%d/%m/%Y')}</td><td>{p:.2f}</td></tr>"
+    html_content += "</table>"
+
+    html_content += "</body></html>"
+
+    # Cria arquivo temporário HTML
+    tmp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".html")
+    tmp_file.write(html_content.encode("utf-8"))
+    tmp_file.close()
+    
+    # Abre no navegador padrão
+    webbrowser.open(f"file://{tmp_file.name}")
 
 # -----------------------------
 # Página Históricos Acumulados
 # -----------------------------
 def historico_acumulado_page():
-    # BLOCO 1: Filtros de período
     st.header("📅 Seleção de Período para Histórico Acumulado")
     col1, col2, col3 = st.columns([2,2,1])
     with col1:
@@ -1350,79 +1396,26 @@ def historico_acumulado_page():
     incluir_consumo = st.checkbox("Incluir consumo diário", value=True)
 
     if gerar:
-        # Variáveis do session_state
         consumo_historico = st.session_state.get("consumo_historico", [])
         pontos_semana = st.session_state.get("pontos_semana", [])
         peso_list = st.session_state.get("peso", [])
         datas_peso = st.session_state.get("datas_peso", [])
         atividades = st.session_state.get("activities", {})
 
-        # -----------------------------
-        # Indicadores Resumidos
-        # -----------------------------
-        st.markdown("### 📊 Indicadores Resumidos do Período")
-        peso_filtrado = [(p,d) for p,d in zip(peso_list,datas_peso) if data_inicio <= d <= data_fim]
         consumo_filtrado = [r for r in consumo_historico if data_inicio <= r["data"] <= data_fim]
+        peso_filtrado = [(p,d) for p,d in zip(peso_list,datas_peso) if data_inicio <= d <= data_fim]
         atividades_filtrado = {d: lst for d,lst in atividades.items() if data_inicio <= d <= data_fim}
 
-        pontos_consumidos = sum(float(r.get("pontos",0)) for r in consumo_filtrado)
-        pontos_extras_acumulados = sum(w.get("extras",36) for w in pontos_semana if any(data_inicio <= r.get("data") <= data_fim for r in w.get("pontos", [])))
-
-        if peso_filtrado:
-            peso_inicial = peso_filtrado[0][0]
-            peso_final = peso_filtrado[-1][0]
-            if peso_final < peso_inicial:
-                tendencia = "⬇️"
-            elif peso_final > peso_inicial:
-                tendencia = "⬆️"
-            else:
-                tendencia = "➖"
-        else:
-            peso_inicial = peso_final = 0.0
-            tendencia = "➖"
-
-        col1, col2, col3, col4 = st.columns(4)
-        col1.metric("Pontos Extras Acumulados", f"{pontos_extras_acumulados:.0f}")
-        col2.metric("Pontos Consumidos", f"{pontos_consumidos:.0f}")
-        col3.metric("Peso Inicial x Final", f"{peso_inicial:.1f}kg → {peso_final:.1f}kg")
-        col4.metric("Tendência Geral Peso", tendencia)
-
-        # -----------------------------
-        # Tabelas de Histórico Detalhado
-        # -----------------------------
-        st.markdown("### 🗂 Histórico Detalhado")
-
-        # Pontos Semanais
-        st.subheader("📌 Pontos Semanais")
-        for w in pontos_semana:
-            week_points = [r for r in w.get("pontos",[]) if data_inicio <= r["data"] <= data_fim]
-            if week_points:
-                st.markdown(f"**Semana {w['semana']}** — Extras Restantes: {w['extras']}")
-                for r in week_points:
-                    st.write(f"{r['data'].strftime('%d/%m/%Y')}: {r['nome']} — {r['quantidade']} min — {r['pontos']} pts (usou extras: {r.get('usou_extras',0)})")
-
-        # Consumo Diário
-        if incluir_consumo:
-            st.subheader("🍴 Consumo Diário")
-            for r in consumo_filtrado:
-                st.write(f"{r['data'].strftime('%d/%m/%Y')}: {r['nome']} — {r['quantidade']} g — {r['pontos']} pts (usou extras: {r.get('usou_extras',0)})")
-
-        # Peso
-        st.subheader("⚖️ Peso")
-        for p,d in peso_filtrado:
-            st.write(f"{d.strftime('%d/%m/%Y')}: {p:.2f} kg")
-
-        # Atividades Físicas
-        if incluir_atividades:
-            st.subheader("🏃 Atividades Físicas")
-            for d, lst in sorted(atividades_filtrado.items()):
-                for a in lst:
-                    st.write(f"{d.strftime('%d/%m/%Y')}: {a['tipo']} — {a['minutos']} min — {a['pontos']} pts")
-
-        # -----------------------------
-        # BLOCO 4: Botão Gerar Relatório / Imprimir
-        # -----------------------------
-        blocos_imprimir_relatorio()
+        blocos_gerar_relatorio_html(
+            consumo_filtrado,
+            atividades_filtrado,
+            peso_filtrado,
+            pontos_semana,
+            data_inicio,
+            data_fim,
+            incluir_consumo,
+            incluir_atividades
+        )
 
 # -----------------------------
 # ROTAS / PAGES
