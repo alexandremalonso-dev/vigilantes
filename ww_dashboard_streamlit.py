@@ -1130,22 +1130,38 @@ if st.session_state.menu == "🏠 Dashboard":
                 unsafe_allow_html=True
             )
 
-    # -----------------------------
-    # Tendência de Peso (abaixo dos históricos)
-    # -----------------------------
-    st.markdown("### 📈 Tendência de Peso")
-    if st.session_state.peso:
-        df_peso = pd.DataFrame({"Data": [d.isoformat() for d in st.session_state.datas_peso], "Peso": st.session_state.peso})
-        df_peso["Data_dt"] = pd.to_datetime(df_peso["Data"])
-        fig_line = go.Figure(go.Scatter(
-            x=list(df_peso["Data_dt"]),
-            y=list(df_peso["Peso"]),
-            mode="lines+markers",
-            line=dict(color="#8e44ad", width=3),
-            marker=dict(size=8)
-        ))
-        fig_line.update_layout(yaxis_title="Peso (kg)", xaxis_title="Data", template="plotly_white")
-        st.plotly_chart(fig_line, use_container_width=True)
+# -----------------------------
+# Tendência de Peso (abaixo dos históricos)
+# -----------------------------
+import numpy as np
+
+if len(df_peso) >= 2:
+    # transformar datas em número ordinal para regressão
+    x_ord = np.array([d.toordinal() for d in df_peso["Data_dt"]])
+    y = np.array(df_peso["Peso"])
+    # regressão linear simples
+    m, b = np.polyfit(x_ord, y, 1)
+    y_trend = m * x_ord + b
+else:
+    y_trend = df_peso["Peso"]
+
+fig_line = go.Figure(
+    go.Scatter(
+        x=df_peso["Data_dt"],
+        y=y_trend,
+        mode="lines",
+        line=dict(color="#8e44ad", width=3)
+    )
+)
+
+fig_line.update_layout(
+    yaxis_title="Peso (kg)",
+    xaxis_title="Data",
+    template="plotly_white"
+)
+
+st.plotly_chart(fig_line, use_container_width=True)
+
 
 # -----------------------------
 # FUNÇÃO DE ATIVIDADES FÍSICAS
