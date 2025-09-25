@@ -114,7 +114,9 @@ def login_user(email, password):
         st.session_state.logged_in = True
         st.session_state.current_user = email
 
-        # Arquivos do usuário
+        # -----------------------------
+        # Arquivos do usuário (apenas após login)
+        # -----------------------------
         USER_DATA_FILE = f"data_{email}.json"
         ACTIVITY_FILE = f"activities_{email}.json"
 
@@ -164,7 +166,7 @@ def login_user(email, password):
                 w["atividades"] = []
 
         # -----------------------------
-        # Migrar atividades soltas para a semana correta
+        # Migrar atividades soltas para semana correta
         # -----------------------------
         for dia_str, lst in activities_store.items():
             dia_obj = (
