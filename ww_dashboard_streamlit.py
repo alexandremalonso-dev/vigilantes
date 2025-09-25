@@ -1250,9 +1250,9 @@ if st.session_state.menu == "🏠 Dashboard":
     # -----------------------------
     # Gráficos principais
     # -----------------------------
-    col1, col2, col3 = st.columns(3, gap="large")
+    col1, col2, col3 = st.columns(3)
 
-    graf_height = 330  # tamanho maior para ajustar à tela como antes
+    graf_height = 280  # altura fixa para todos os gráficos
 
     # Consumo Diário
     with col1:
@@ -1349,7 +1349,7 @@ if st.session_state.menu == "🏠 Dashboard":
                 dia_str = dia.strftime("%d/%m/%Y") if isinstance(dia, datetime.date) else str(dia)
                 dia_sem = weekday_name_br(dia) if isinstance(dia, datetime.date) else ""
                 usados_txt = f" - usou extras: {reg.get('usou_extras',0.0):.2f} pts" if reg.get("usou_extras", 0.0) else ""
-                st.markdown(f"<div style='padding:10px; border:1px solid #f39c12; border-radius:5px; margin-bottom:5px;'>{dia_str} ({dia_sem}): {reg['nome']} {reg['quantidade']:.2f} g (<b>{reg['pontos']:.2f} pts</b>){usados_txt}</div>", unsafe_allow_html=True)
+                st.markdown(f"<div style='padding:10px; border:1px solid #f39c12; border-radius:5px; margin-bottom:5px;'>{dia_str} ({dia_sem}): {reg['nome']} {reg['quantidade']:.2f} g **({reg['pontos']:.2f} pts)**{usados_txt}</div>", unsafe_allow_html=True)
         else:
             st.write(" - (sem registros)")
 
@@ -1362,7 +1362,7 @@ if st.session_state.menu == "🏠 Dashboard":
             for d, tipo, minutos, pontos in sorted(acts_list, key=lambda x: x[0]):
                 d_str = d.strftime("%d/%m/%Y") if isinstance(d, datetime.date) else str(d)
                 dia_sem = weekday_name_br(d) if isinstance(d, datetime.date) else ""
-                st.markdown(f"<div style='padding:10px; border:1px solid #1abc9c; border-radius:5px; margin-bottom:5px;'>{d_str} ({dia_sem}): {tipo} - {minutos:.2f} min (<b>{pontos:.2f} pts</b>)</div>", unsafe_allow_html=True)
+                st.markdown(f"<div style='padding:10px; border:1px solid #1abc9c; border-radius:5px; margin-bottom:5px;'>{d_str} ({dia_sem}): {tipo} - {minutos:.2f} min **({pontos:.2f} pts)**</div>", unsafe_allow_html=True)
         else:
             st.info("Nenhuma atividade registrada ainda.")
 
