@@ -975,111 +975,6 @@ if st.session_state.menu == "🏠 Dashboard":
         semana_obj = {"semana": semana_atual, "extras": 36.0, "pontos": []}
         st.session_state.pontos_semana.append(semana_obj)
 
-# -----------------------------
-# Indicadores principais
-# -----------------------------
-col1, col2, col3 = st.columns(3)
-
-# Consumo Diário
-with col1:
-    st.markdown("### 🍽️ Consumo Diário")
-    meta_diaria = st.session_state.meta_diaria
-    consumo_diario = float(st.session_state.consumo_diario)
-    fig1 = go.Figure(go.Indicator(
-        mode="gauge+number",
-        value=consumo_diario,
-        number={'suffix': f" / {meta_diaria}"},
-        gauge={'axis': {'range': [0, meta_diaria]},
-               'bar': {'color': "#e74c3c"},
-               'steps': [
-                   {'range': [0, meta_diaria * 0.7], 'color': "#2ecc71"},
-                   {'range': [meta_diaria * 0.7, meta_diaria], 'color': "#f1c40f"}
-               ]},
-        title={'text': "Pontos Consumidos"}))
-    st.plotly_chart(fig1, use_container_width=True)
-
-# Pontos Extras (banco de pontos)
-with col2:
-    st.markdown("### ⭐ Pontos Extras (semana)")
-
-    semana_obj = next((w for w in st.session_state.pontos_semana if w["semana"] == semana_atual), None)
-    if not semana_obj:
-        semana_obj = {"semana": semana_atual, "extras": 36.0, "pontos": []}
-
-    pontos_atividade_semana = sum(
-        a.get('pontos', 0.0)
-        for dia_str, lst in st.session_state.activities.items()
-        for a in lst
-        if iso_week_number(datetime.datetime.strptime(dia_str, "%Y-%m-%d").date() if isinstance(dia_str, str) else dia_str) == semana_atual
-    )
-    total_banco = 36.0 + pontos_atividade_semana
-    usados = total_banco - float(semana_obj.get("extras", 36.0))
-
-    fig2 = go.Figure(go.Indicator(
-        mode="gauge+number",
-        value=usados,
-        number={'suffix': f" / {total_banco:.0f}"},
-        gauge={'axis': {'range': [0, total_banco]},
-               'bar': {'color': "#006400"},
-               'steps': [
-                   {'range': [0, total_banco/3], 'color': "#e74c3c"},
-                   {'range': [total_banco/3, 2*total_banco/3], 'color': "#f1c40f"},
-                   {'range': [2*total_banco/3, total_banco], 'color': "#2ecc71"}
-               ]},
-        title={'text': "Banco de Pontos Extras (usados / total)"}
-    ))
-    st.plotly_chart(fig2, use_container_width=True)
-
-# Peso Atual
-with col3:
-    st.markdown("### ⚖️ Peso Atual")
-    if len(st.session_state.peso) <= 1:
-        cor_gauge = "blue"
-        tendencia = "➖"
-    else:
-        if st.session_state.peso[-1] < st.session_state.peso[-2]:
-            cor_gauge = "green"
-            tendencia = "⬇️"
-        elif st.session_state.peso[-1] > st.session_state.peso[-2]:
-            cor_gauge = "orange"
-            tendencia = "⬆️"
-        else:
-            cor_gauge = "blue"
-            tendencia = "➖"
-
-    min_axis = min(st.session_state.peso) - 5 if st.session_state.peso else 0
-    max_axis = max(st.session_state.peso) + 5 if st.session_state.peso else 100
-    fig_gauge = go.Figure(go.Indicator(
-        mode="gauge+number",
-        value=peso_atual,
-        gauge={'axis': {'range': [min_axis, max_axis]},
-               'bar': {'color': cor_gauge}},
-        title={'text': f"Peso Atual {tendencia}"}
-    ))
-    st.plotly_chart(fig_gauge, use_container_width=True)
-
-# -----------------------------
-# DASHBOARD PRINCIPAL
-# -----------------------------
-if st.session_state.menu == "🏠 Dashboard":
-    st.markdown("<h1 style='text-align: center; color: #2c3e50;'>🍏 Vigilantes do Peso Brasil</h1>", unsafe_allow_html=True)
-
-    # Solicitar peso inicial se não houver
-    if not st.session_state.peso:
-        st.warning("⚖️ Por favor, registre seu peso inicial antes de usar o dashboard.")
-        registrar_peso()
-        st.stop()
-
-    # Garantir semana atual e recalcular a partir do histórico
-    ensure_current_week_exists()
-    rebuild_pontos_semana_from_history()
-
-    peso_atual = st.session_state.peso[-1] if st.session_state.peso else 0.0
-    semana_atual = iso_week_number(datetime.date.today())  # ✅ Corrigido
-    semana_obj = next((w for w in st.session_state.pontos_semana if w["semana"] == semana_atual), None)
-    if not semana_obj:
-        semana_obj = {"semana": semana_atual, "extras": 36.0, "pontos": []}
-
     # -----------------------------
     # Indicadores principais
     # -----------------------------
@@ -1088,53 +983,37 @@ if st.session_state.menu == "🏠 Dashboard":
     # Consumo Diário
     with col1:
         st.markdown("### 🍽️ Consumo Diário")
-        meta_diaria = st.session_state.meta_diaria
-        consumo_diario = float(st.session_state.consumo_diario)
         fig1 = go.Figure(go.Indicator(
             mode="gauge+number",
-            value=consumo_diario,
-            number={'suffix': f" / {meta_diaria}"},
-            gauge={'axis': {'range': [0, meta_diaria]},
+            value=float(st.session_state.consumo_diario),
+            number={'suffix': f" / {st.session_state.meta_diaria:.0f}"},
+            gauge={'axis': {'range': [0, st.session_state.meta_diaria]},
                    'bar': {'color': "#e74c3c"},
                    'steps': [
-                       {'range': [0, meta_diaria * 0.7], 'color': "#2ecc71"},
-                       {'range': [meta_diaria * 0.7, meta_diaria], 'color': "#f1c40f"}
+                       {'range': [0, st.session_state.meta_diaria * 0.7], 'color': "#2ecc71"},
+                       {'range': [st.session_state.meta_diaria * 0.7, st.session_state.meta_diaria], 'color': "#f1c40f"}
                    ]},
-            title={'text': "Pontos Consumidos"}))
+            title={'text': "Pontos Consumidos"}
+        ))
         st.plotly_chart(fig1, use_container_width=True)
 
-    # Pontos Extras (banco de pontos)
-    with col2:
-        st.markdown("### ⭐ Pontos Extras (semana)")
-
-        # Total inicial + pontos ganhos por atividades
-        pontos_atividade_semana = sum(
-            a.get('pontos', 0.0)
-            for dia_str, lst in st.session_state.activities.items()
-            for a in lst
-            if iso_week_number(datetime.datetime.strptime(dia_str, "%Y-%m-%d").date() if isinstance(dia_str, str) else dia_str) == semana_atual
-        )
-        total_banco = 36.0 + pontos_atividade_semana
-
-        # Valor usado até agora
-        usados = total_banco - float(semana_obj.get("extras", 36.0))
-        # Gauge começa em 0 e cresce conforme consumo
-        fig2 = go.Figure(go.Indicator(
-            mode="gauge+number",
-            value=usados,
-            number={'suffix': f" / {total_banco:.0f}"},
-            gauge={'axis': {'range': [0, total_banco]},
-                   'bar': {'color': "#006400"},
-                   'steps': [
-                       {'range': [0, total_banco/3], 'color': "#e74c3c"},
-                       {'range': [total_banco/3, 2*total_banco/3], 'color': "#f1c40f"},
-                       {'range': [2*total_banco/3, total_banco], 'color': "#2ecc71"}
-                   ]},
-            title={'text': "Banco de Pontos Extras (usados / total)"}
-        ))
-        st.plotly_chart(fig2, use_container_width=True)
-
-    # Peso Atual
+# Pontos Semanais
+with col_hist2:
+    st.markdown("### 📊 Pontos Semanais")
+    all_pontos = [reg for w in st.session_state.pontos_semana for reg in w.get("pontos", [])]
+    if not all_pontos:
+        st.write(" - (sem registros)")
+    else:
+        for reg in sorted(all_pontos, key=lambda x: x["data"]):
+            dia = reg["data"].strftime("%d/%m/%Y") if isinstance(reg["data"], datetime.date) else str(reg["data"])
+            dia_sem = weekday_name_br(reg["data"]) if isinstance(reg["data"], datetime.date) else ""
+            usados = f" - usou extras: {reg.get('usou_extras',0.0):.2f} pts" if reg.get("usou_extras", 0.0) else ""
+            st.markdown(
+                f"<div style='padding:10px; border:1px solid #f39c12; border-radius:5px; margin-bottom:5px;'>{dia} ({dia_sem}): {reg['nome']} {reg['quantidade']:.2f} min ({reg['pontos']:.2f} pts){usados}</div>",
+                unsafe_allow_html=True
+            )
+            
+    # Peso Atual (sem alteração no estilo)
     with col3:
         st.markdown("### ⚖️ Peso Atual")
         if len(st.session_state.peso) <= 1:
