@@ -1344,34 +1344,20 @@ if st.session_state.menu == "🏠 Dashboard":
                 dia_str = dia.strftime("%d/%m/%Y") if isinstance(dia, datetime.date) else str(dia)
                 dia_sem = weekday_name_br(dia) if isinstance(dia, datetime.date) else ""
                 usados_txt = f" - usou extras: {reg.get('usou_extras',0.0):.2f} pts" if reg.get("usou_extras", 0.0) else ""
-                st.markdown(
-                    f"<div style='padding:10px; border:1px solid #f39c12; border-radius:5px; margin-bottom:5px;'>"
-                    f"{dia_str} ({dia_sem}): {reg['nome']} {reg['quantidade']:.2f} g "
-                    f"<span style='color:#1f3c88'><b>{reg['pontos']:.2f} pts</b></span>{usados_txt}"
-                    f"</div>", unsafe_allow_html=True
-                )
+                st.markdown(f"<div style='padding:10px; border:1px solid #f39c12; border-radius:5px; margin-bottom:5px;'>{dia_str} ({dia_sem}): {reg['nome']} {reg['quantidade']:.2f} g (<b>{reg['pontos']:.2f} pts</b>){usados_txt}</div>", unsafe_allow_html=True)
         else:
             st.write(" - (sem registros)")
 
     # Histórico de Atividades
     with col_hist2:
         st.markdown("### 🏃 Histórico de Atividades Físicas")
-        acts_list = [
-            (a["horario"], a.get('atividade'), a.get('minutos', 0), a.get('pontos', 0))
-            for w in st.session_state.pontos_semana
-            for a in w.get("atividades", [])
-        ]
+        acts_list = [(d, a.get('tipo'), a.get('minutos',0), a.get('pontos',0)) 
+                     for d,lst in st.session_state.get("activities", {}).items() for a in lst]
         if acts_list:
             for d, tipo, minutos, pontos in sorted(acts_list, key=lambda x: x[0]):
-                d_str = d.split(" ")[0] if isinstance(d, str) else str(d)
-                dia_obj = datetime.datetime.fromisoformat(d_str) if isinstance(d_str, str) else d_str
-                dia_sem = weekday_name_br(dia_obj.date()) if isinstance(dia_obj, datetime.datetime) else ""
-                st.markdown(
-                    f"<div style='padding:10px; border:1px solid #1abc9c; border-radius:5px; margin-bottom:5px;'>"
-                    f"{dia_obj.strftime('%d/%m/%Y')} ({dia_sem}): {tipo} - {minutos:.2f} min "
-                    f"<span style='color:#1f3c88'><b>{pontos:.2f} pts</b></span>"
-                    f"</div>", unsafe_allow_html=True
-                )
+                d_str = d.strftime("%d/%m/%Y") if isinstance(d, datetime.date) else str(d)
+                dia_sem = weekday_name_br(d) if isinstance(d, datetime.date) else ""
+                st.markdown(f"<div style='padding:10px; border:1px solid #1abc9c; border-radius:5px; margin-bottom:5px;'>{d_str} ({dia_sem}): {tipo} - {minutos:.2f} min (<b>{pontos:.2f} pts</b>)</div>", unsafe_allow_html=True)
         else:
             st.info("Nenhuma atividade registrada ainda.")
 
@@ -1388,11 +1374,7 @@ if st.session_state.menu == "🏠 Dashboard":
                     tendencia = "⬆️"
                 else:
                     tendencia = "➖"
-            st.markdown(
-                f"<div style='padding:10px; border:1px solid #3498db; border-radius:5px; margin-bottom:5px;'>"
-                f"{d.strftime('%d/%m/%Y')} ({weekday_name_br(d)}): {p:.2f} kg {tendencia}"
-                f"</div>", unsafe_allow_html=True
-            )
+            st.markdown(f"<div style='padding:10px; border:1px solid #3498db; border-radius:5px; margin-bottom:5px;'>{d.strftime('%d/%m/%Y')} ({weekday_name_br(d)}): {p:.2f} kg {tendencia}</div>", unsafe_allow_html=True)
 
     # -----------------------------
     # Tendência de Peso (linha)
