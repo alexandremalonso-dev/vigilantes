@@ -1269,7 +1269,7 @@ if st.session_state.menu == "🏠 Dashboard":
             title={'text': "Pontos Consumidos"}))
         st.plotly_chart(fig1, use_container_width=True)
 
-    # Pontos Extras (estável de ontem)
+    # Pontos Extras (estável)
     with col2:
         st.markdown("### ⭐ Pontos Extras (semana)")
         pontos_atividade_semana = sum(
@@ -1278,23 +1278,21 @@ if st.session_state.menu == "🏠 Dashboard":
             for a in lst
             if iso_week_number(datetime.datetime.strptime(dia_str, "%Y-%m-%d").date() if isinstance(dia_str, str) else dia_str) == semana_atual
         )
-        extras_val = float(semana_obj.get("extras", 36.0)) + float(pontos_atividade_semana)
-        max_val = max(36, extras_val + 2)
-        step1 = max_val / 3
-        step2 = 2 * step1
-        step3 = max_val
-
+        total_banco = 36.0 + pontos_atividade_semana
+        usados = total_banco - float(semana_obj.get("extras", 36.0))
+        valor_gauge = usados if usados > 0 else total_banco  # barra verde cheia se não usado nenhum ponto
         fig2 = go.Figure(go.Indicator(
             mode="gauge+number",
-            value=extras_val,
-            gauge={'axis': {'range': [0, max_val]},
+            value=valor_gauge,
+            number={'suffix': f" / {total_banco:.0f}"},
+            gauge={'axis': {'range': [0, total_banco]},
                    'bar': {'color': "#006400"},
                    'steps': [
-                       {'range': [0, step1], 'color': "#e74c3c"},
-                       {'range': [step1, step2], 'color': "#f1c40f"},
-                       {'range': [step2, step3], 'color': "#2ecc71"}
+                       {'range': [0, total_banco/3], 'color': "#e74c3c"},
+                       {'range': [total_banco/3, 2*total_banco/3], 'color': "#f1c40f"},
+                       {'range': [2*total_banco/3, total_banco], 'color': "#2ecc71"}
                    ]},
-            title={'text': "Pontos Extras Disponíveis (semana)"}
+            title={'text': "Usado / Total (Pontos Extras)"}
         ))
         st.plotly_chart(fig2, use_container_width=True)
 
@@ -1338,29 +1336,31 @@ if st.session_state.menu == "🏠 Dashboard":
         if all_pontos:
             for reg in sorted(all_pontos, key=lambda x: x["data"]):
                 dia = reg["data"]
-                if isinstance(dia, datetime.date):
-                    dia_str = dia.strftime("%d/%m/%Y")
-                else:
-                    dia_str = str(dia)
+                dia_str = dia.strftime("%d/%m/%Y") if isinstance(dia, datetime.date) else str(dia)
                 dia_sem = weekday_name_br(dia) if isinstance(dia, datetime.date) else ""
-                usados_txt = f" - usou extras: {reg.get('usou_extras',0.0):.2f} pts" if reg.get("usou_extras", 0.0) else ""
-                st.markdown(f"<div style='padding:10px; border:1px solid #f39c12; border-radius:5px; margin-bottom:5px;'>{dia_str} ({dia_sem}): {reg['nome']} {reg['quantidade']:.2f} g ({reg['pontos']:.2f} pts){usados_txt}</div>", unsafe_allow_html=True)
+                usados_txt = f" - usou extras: **{reg.get('usou_extras',0.0):.2f} pts**" if reg.get("usou_extras", 0.0) else ""
+                st.markdown(
+                    f"<div style='padding:10px; border:1px solid #f39c12; border-radius:5px; margin-bottom:5px;'>"
+                    f"{dia_str} ({dia_sem}): {reg['nome']} {reg['quantidade']:.2f} g (**{reg['pontos']:.2f} pts**){usados_txt}</div>",
+                    unsafe_allow_html=True
+                )
         else:
             st.write(" - (sem registros)")
 
-    # Histórico de Atividades
+    # Histórico de Atividades Físicas
     with col_hist2:
         st.markdown("### 🏃 Histórico de Atividades Físicas")
         acts_list = [(d, a.get('tipo'), a.get('minutos',0), a.get('pontos',0)) 
                      for d,lst in st.session_state.get("activities", {}).items() for a in lst]
         if acts_list:
             for d, tipo, minutos, pontos in sorted(acts_list, key=lambda x: x[0]):
-                # Converte data para string
-                if isinstance(d, datetime.date):
-                    d_str = d.strftime("%d/%m/%Y")
-                else:
-                    d_str = str(d)
-                st.markdown(f"<div style='padding:10px; border:1px solid #1abc9c; border-radius:5px; margin-bottom:5px;'>{d_str}: {tipo} - {minutos:.2f} min ({pontos:.2f} pts)</div>")
+                dia_sem = weekday_name_br(d) if isinstance(d, datetime.date) else ""
+                d_str = d.strftime("%d/%m/%Y") if isinstance(d, datetime.date) else str(d)
+                st.markdown(
+                    f"<div style='padding:10px; border:1px solid #1abc9c; border-radius:5px; margin-bottom:5px;'>"
+                    f"{d_str} ({dia_sem}): {tipo} - {minutos:.2f} min (**{pontos:.2f} pts**)</div>",
+                    unsafe_allow_html=True
+                )
         else:
             st.info("Nenhuma atividade registrada ainda.")
 
@@ -1377,7 +1377,12 @@ if st.session_state.menu == "🏠 Dashboard":
                     tendencia = "⬆️"
                 else:
                     tendencia = "➖"
-            st.markdown(f"<div style='padding:10px; border:1px solid #3498db; border-radius:5px; margin-bottom:5px;'>{d.strftime('%d/%m/%Y')}: {p:.2f} kg {tendencia}</div>", unsafe_allow_html=True)
+            dia_sem = weekday_name_br(d) if isinstance(d, datetime.date) else ""
+            st.markdown(
+                f"<div style='padding:10px; border:1px solid #3498db; border-radius:5px; margin-bottom:5px;'>"
+                f"{d.strftime('%d/%m/%Y')} ({dia_sem}): {p:.2f} kg {tendencia}</div>",
+                unsafe_allow_html=True
+            )
 
     # -----------------------------
     # Tendência de Peso (linha)
