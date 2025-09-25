@@ -96,7 +96,7 @@ def weekday_name_br(dt: datetime.date):
 
 
 # -----------------------------
-# LOGIN / USUÁRIOS E CARREGAMENTO DE DADOS
+# LOGIN / USUÁRIOS
 # -----------------------------
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
@@ -115,61 +115,35 @@ def login_user(email, password):
         st.session_state.logged_in = True
         st.session_state.current_user = email
 
-        # Definir arquivos do usuário
-        USER_DATA_FILE = f"data_{email}.json"
-        ACTIVITY_FILE = f"activities_{email}.json"
+        # Carregar dados privados do usuário assim que logar
+        user_data_file = f"data_{email}.json"
+        activity_file = f"activities_{email}.json"
+        data_store = load_data(user_data_file) or {}
+        activities = load_data(activity_file) or {}
 
-        # Carregar dados privados do usuário
-        data_store = load_data(USER_DATA_FILE) or {}
-        activities_store = load_data(ACTIVITY_FILE) or {}
-
-        # Reconstruir session_state básico
-        st.session_state.peso = st.session_state.get("peso", data_store.get("peso", []))
-        st.session_state.datas_peso = st.session_state.get(
-            "datas_peso",
+        # Popular session_state imediatamente sem sobrescrever vazio
+        st.session_state.peso = data_store.get("peso", st.session_state.get("peso", []))
+        st.session_state.datas_peso = (
             [datetime.date.fromisoformat(d) for d in data_store.get("datas_peso", [])]
-            if data_store.get("datas_peso") else []
+            if data_store.get("datas_peso")
+            else st.session_state.get("datas_peso", [])
         )
-        st.session_state.consumo_historico = st.session_state.get(
-            "consumo_historico", data_store.get("consumo_historico", [])
+        st.session_state.consumo_historico = data_store.get(
+            "consumo_historico", st.session_state.get("consumo_historico", [])
         )
-        st.session_state.pontos_semana = st.session_state.get(
-            "pontos_semana", data_store.get("pontos_semana", [])
+        st.session_state.pontos_semana = data_store.get(
+            "pontos_semana", st.session_state.get("pontos_semana", [])
         )
-        st.session_state.extras = st.session_state.get("extras", float(data_store.get("extras", 36.0)))
-        st.session_state.consumo_diario = st.session_state.get(
-            "consumo_diario", float(data_store.get("consumo_diario", 0.0))
+        st.session_state.extras = float(
+            data_store.get("extras", st.session_state.get("extras", 36.0))
         )
-        st.session_state.meta_diaria = st.session_state.get("meta_diaria", data_store.get("meta_diaria", 29))
-
-        # Garantir que cada semana tenha chave de atividades
-        for w in st.session_state.pontos_semana:
-            if "atividades" not in w:
-                w["atividades"] = []
-
-        # Migrar atividades soltas para a semana correta
-        for dia_str, lst in activities_store.items():
-            dia_obj = (
-                datetime.datetime.strptime(dia_str, "%Y-%m-%d").date()
-                if isinstance(dia_str, str)
-                else dia_str
-            )
-            semana_num = iso_week_number(dia_obj)
-            semana_obj = next((w for w in st.session_state.pontos_semana if w.get("semana") == semana_num), None)
-            if semana_obj is None:
-                semana_obj = {"semana": semana_num, "pontos": [], "extras": 36.0, "atividades": []}
-                st.session_state.pontos_semana.append(semana_obj)
-            for a in lst:
-                atividade = {
-                    "tipo": a.get("tipo"),
-                    "minutos": a.get("minutos", 0),
-                    "pontos": a.get("pontos", 0),
-                    "horario": a.get("horario", dia_obj.isoformat())
-                }
-                semana_obj["atividades"].append(atividade)
-
-        # Limpar activities soltas (agora migradas)
-        st.session_state.activities = {}
+        st.session_state.consumo_diario = float(
+            data_store.get("consumo_diario", st.session_state.get("consumo_diario", 0.0))
+        )
+        st.session_state.meta_diaria = data_store.get(
+            "meta_diaria", st.session_state.get("meta_diaria", 29)
+        )
+        st.session_state.activities = activities or st.session_state.get("activities", {})
 
         st.success(f"Bem-vindo(a), {email}!")
         return True
@@ -263,10 +237,10 @@ if "menu" not in st.session_state:
     st.session_state.menu = "🏠 Dashboard"
 
 # -----------------------------
-# FUNÇÃO DE PERSISTÊNCIA AJUSTADA
+# FUNÇÃO DE PERSISTÊNCIA
 # -----------------------------
 def persist_all():
-    """Salva todos os dados do usuário, incluindo pontos e atividades físicas dentro de cada semana"""
+    """Salva apenas os dados privados do usuário"""
     try:
         ds = {
             "peso": st.session_state.peso,
@@ -309,20 +283,12 @@ def persist_all():
                         for p in w.get("pontos", [])
                     ],
                     "extras": w.get("extras", 36.0),
-                    "atividades": [
-                        {
-                            "tipo": a.get("tipo"),
-                            "minutos": a.get("minutos", 0),
-                            "pontos": a.get("pontos", 0),
-                            "horario": a["horario"] if isinstance(a["horario"], str) else a["horario"].isoformat()
-                        }
-                        for a in w.get("atividades", [])
-                    ],
                 }
                 for w in st.session_state.pontos_semana
             ],
         }
         save_data(ds, USER_DATA_FILE)
+        save_data(st.session_state.activities, ACTIVITY_FILE)
     except Exception as e:
         st.error(f"Erro ao persistir dados: {e}")
 
@@ -1243,6 +1209,7 @@ def consultar_alimento():
                 st.success(f"Alimento '{nome_novo}' atualizado com sucesso! Pontos: {alimento['Pontos']}")
                 rerun_streamlit()
 
+
 # -----------------------------
 # DASHBOARD PRINCIPAL COMPLETO COM HISTÓRICOS E GRÁFICOS
 # -----------------------------
@@ -1251,55 +1218,6 @@ import plotly.graph_objects as go
 import numpy as np
 import pandas as pd
 
-# -----------------------------
-# Carregar dados privados do usuário e reconstruir atividades nas semanas
-# -----------------------------
-data_store = load_data(USER_DATA_FILE) or {}
-activities_store = load_data(ACTIVITY_FILE) or {}
-
-# Reconstruir session_state básico
-st.session_state.peso = data_store.get("peso", [])
-st.session_state.datas_peso = [
-    datetime.date.fromisoformat(d) for d in data_store.get("datas_peso", [])
-] if data_store.get("datas_peso") else []
-st.session_state.consumo_historico = data_store.get("consumo_historico", [])
-st.session_state.pontos_semana = data_store.get("pontos_semana", [])
-st.session_state.consumo_diario = float(data_store.get("consumo_diario", 0.0))
-st.session_state.meta_diaria = data_store.get("meta_diaria", 29)
-st.session_state.extras = float(data_store.get("extras", 36.0))
-
-# Garantir que cada semana tenha chave de atividades
-for w in st.session_state.pontos_semana:
-    if "atividades" not in w:
-        w["atividades"] = []
-
-# Migrar atividades soltas para a semana correta
-for dia_str, lst in activities_store.items():
-    dia_obj = (
-        datetime.datetime.strptime(dia_str, "%Y-%m-%d").date()
-        if isinstance(dia_str, str)
-        else dia_str
-    )
-    semana_num = iso_week_number(dia_obj)
-    semana_obj = next((w for w in st.session_state.pontos_semana if w.get("semana") == semana_num), None)
-    if semana_obj is None:
-        semana_obj = {"semana": semana_num, "pontos": [], "extras": 36.0, "atividades": []}
-        st.session_state.pontos_semana.append(semana_obj)
-    for a in lst:
-        atividade = {
-            "tipo": a.get("tipo"),
-            "minutos": a.get("minutos", 0),
-            "pontos": a.get("pontos", 0),
-            "horario": a.get("horario", dia_obj.isoformat())
-        }
-        semana_obj["atividades"].append(atividade)
-
-# Limpar activities soltas (agora migradas)
-st.session_state.activities = {}
-
-# -----------------------------
-# Dashboard
-# -----------------------------
 if st.session_state.menu == "🏠 Dashboard":
     st.markdown("<h1 style='text-align: center; color: #2c3e50;'>🍏 Vigilantes do Peso Brasil</h1>", unsafe_allow_html=True)
 
@@ -1319,7 +1237,7 @@ if st.session_state.menu == "🏠 Dashboard":
     # Garante que exista objeto da semana
     semana_obj = next((w for w in st.session_state.pontos_semana if w.get("semana") == semana_atual), None)
     if semana_obj is None:
-        semana_obj = {"semana": semana_atual, "pontos": [], "extras": float(st.session_state.get("extras", 36.0)), "atividades": []}
+        semana_obj = {"semana": semana_atual, "pontos": [], "extras": float(st.session_state.get("extras", 36.0))}
         st.session_state.pontos_semana.append(semana_obj)
 
     st.markdown(
@@ -1333,7 +1251,8 @@ if st.session_state.menu == "🏠 Dashboard":
     # Gráficos principais
     # -----------------------------
     col1, col2, col3 = st.columns(3, gap="large")
-    graf_height = 430
+
+    graf_height = 330  # tamanho maior para ajustar à tela como antes
 
     # Consumo Diário
     with col1:
@@ -1356,12 +1275,18 @@ if st.session_state.menu == "🏠 Dashboard":
 
     # Pontos Extras
     with col2:
+        st.markdown("### ⭐ Pontos Extras (semana)")
         pontos_atividade_semana = sum(
             a.get('pontos', 0.0)
-            for a in semana_obj.get("atividades", [])
+            for dia_str, lst in st.session_state.get("activities", {}).items()
+            for a in lst
+            if iso_week_number(datetime.datetime.strptime(dia_str, "%Y-%m-%d").date() if isinstance(dia_str, str) else dia_str) == semana_atual
         )
+
         extras_disponiveis = float(semana_obj.get("extras", 36.0))
         total_banco = extras_disponiveis + pontos_atividade_semana
+
+        # Calcula consumo além do limite diário
         excesso_diario = max(0, st.session_state.consumo_diario - st.session_state.meta_diaria)
 
         fig2 = go.Figure(go.Indicator(
@@ -1375,7 +1300,7 @@ if st.session_state.menu == "🏠 Dashboard":
                        {'range': [total_banco/3, 2*total_banco/3], 'color': "#f1c40f"},
                        {'range': [2*total_banco/3, total_banco], 'color': "#2ecc71"}
                    ]},
-            title={'text': "⭐ Pontos Extras (semana)"}
+            title={'text': "Usado / Total (Pontos Extras)"}
         ))
         fig2.update_layout(height=graf_height)
         st.plotly_chart(fig2, use_container_width=True)
@@ -1423,34 +1348,21 @@ if st.session_state.menu == "🏠 Dashboard":
                 dia = reg["data"]
                 dia_str = dia.strftime("%d/%m/%Y") if isinstance(dia, datetime.date) else str(dia)
                 dia_sem = weekday_name_br(dia) if isinstance(dia, datetime.date) else ""
-                usados_txt = f" - usou extras: ({reg.get('usou_extras',0.0):.2f} pts)" if reg.get("usou_extras",0.0) else ""
-                st.markdown(
-                    f"<div style='padding:10px; border:1px solid #f39c12; border-radius:5px; margin-bottom:5px;'>"
-                    f"{dia_str} ({dia_sem}): {reg['nome']} {reg['quantidade']:.2f} g "
-                    f"<span style='color:#1f3c88'>({reg['pontos']:.2f} pts)</span>{usados_txt}"
-                    f"</div>", unsafe_allow_html=True
-                )
+                usados_txt = f" - usou extras: {reg.get('usou_extras',0.0):.2f} pts" if reg.get("usou_extras", 0.0) else ""
+                st.markdown(f"<div style='padding:10px; border:1px solid #f39c12; border-radius:5px; margin-bottom:5px;'>{dia_str} ({dia_sem}): {reg['nome']} {reg['quantidade']:.2f} g (<b>{reg['pontos']:.2f} pts</b>){usados_txt}</div>", unsafe_allow_html=True)
         else:
             st.write(" - (sem registros)")
 
     # Histórico de Atividades
     with col_hist2:
         st.markdown("### 🏃 Histórico de Atividades Físicas")
-        acts_list = [
-            (a.get("horario"), a.get("tipo"), a.get("minutos",0), a.get("pontos",0))
-            for w in st.session_state.pontos_semana
-            for a in w.get("atividades", [])
-        ]
+        acts_list = [(d, a.get('tipo'), a.get('minutos',0), a.get('pontos',0)) 
+                     for d,lst in st.session_state.get("activities", {}).items() for a in lst]
         if acts_list:
             for d, tipo, minutos, pontos in sorted(acts_list, key=lambda x: x[0]):
-                dia_obj = datetime.datetime.fromisoformat(d) if isinstance(d, str) else d
-                dia_sem = weekday_name_br(dia_obj.date()) if isinstance(dia_obj, datetime.datetime) else ""
-                st.markdown(
-                    f"<div style='padding:10px; border:1px solid #1abc9c; border-radius:5px; margin-bottom:5px;'>"
-                    f"{dia_obj.strftime('%d/%m/%Y')} ({dia_sem}): {tipo} - {minutos:.2f} min "
-                    f"<span style='color:#1f3c88'>({pontos:.2f} pts)</span>"
-                    f"</div>", unsafe_allow_html=True
-                )
+                d_str = d.strftime("%d/%m/%Y") if isinstance(d, datetime.date) else str(d)
+                dia_sem = weekday_name_br(d) if isinstance(d, datetime.date) else ""
+                st.markdown(f"<div style='padding:10px; border:1px solid #1abc9c; border-radius:5px; margin-bottom:5px;'>{d_str} ({dia_sem}): {tipo} - {minutos:.2f} min (<b>{pontos:.2f} pts</b>)</div>", unsafe_allow_html=True)
         else:
             st.info("Nenhuma atividade registrada ainda.")
 
@@ -1467,12 +1379,7 @@ if st.session_state.menu == "🏠 Dashboard":
                     tendencia = "⬆️"
                 else:
                     tendencia = "➖"
-            dia_sem = weekday_name_br(d)
-            st.markdown(
-                f"<div style='padding:10px; border:1px solid #3498db; border-radius:5px; margin-bottom:5px;'>"
-                f"{d.strftime('%d/%m/%Y')} ({dia_sem}): {p:.2f} kg {tendencia}</div>",
-                unsafe_allow_html=True
-            )
+            st.markdown(f"<div style='padding:10px; border:1px solid #3498db; border-radius:5px; margin-bottom:5px;'>{d.strftime('%d/%m/%Y')} ({weekday_name_br(d)}): {p:.2f} kg {tendencia}</div>", unsafe_allow_html=True)
 
     # -----------------------------
     # Tendência de Peso (linha)
@@ -1490,13 +1397,8 @@ if st.session_state.menu == "🏠 Dashboard":
             else:
                 y_trend = np.array(df_peso["Peso"])
                 mode_plot = "markers"
-            fig_line = go.Figure(go.Scatter(
-                x=df_peso["Data_dt"].tolist(),
-                y=y_trend.tolist(),
-                mode=mode_plot,
-                line=dict(color="#8e44ad", width=3)
-            ))
-            fig_line.update_layout(yaxis_title="Peso (kg)", xaxis_title="Data", template="plotly_white", height=400)
+            fig_line = go.Figure(go.Scatter(x=df_peso["Data_dt"].tolist(), y=y_trend.tolist(), mode=mode_plot, line=dict(color="#8e44ad", width=3)))
+            fig_line.update_layout(yaxis_title="Peso (kg)", xaxis_title="Data", template="plotly_white")
             st.plotly_chart(fig_line, use_container_width=True)
         else:
             st.warning("Erro: número de datas e pesos não coincidem.")
