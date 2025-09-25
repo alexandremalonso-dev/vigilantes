@@ -1311,6 +1311,7 @@ def registrar_atividade_fisica():
 # Função Históricos Acumulados
 # -----------------------------
 import streamlit as st
+import streamlit.components.v1 as components
 import datetime
 
 # -----------------------------
@@ -1319,14 +1320,16 @@ import datetime
 def blocos_imprimir_relatorio():
     st.markdown("### 🖨️ Gerar Relatório")
     
-    st.markdown(
+    # HTML + JS via st.components.v1.html para disparar window.print()
+    components.html(
         """
-        <button onclick="window.print()" 
-                style="padding:10px 20px; font-size:16px; background-color:#2ecc71; color:white; border:none; border-radius:5px; cursor:pointer;">
+        <button 
+            style="padding:10px 20px; font-size:16px; background-color:#2ecc71; color:white; border:none; border-radius:5px; cursor:pointer;"
+            onclick="window.print()">
             Gerar Relatório
         </button>
         """,
-        unsafe_allow_html=True
+        height=60,  # altura mínima para o botão
     )
 
 # -----------------------------
@@ -1420,7 +1423,6 @@ def historico_acumulado_page():
         # BLOCO 4: Botão Gerar Relatório / Imprimir
         # -----------------------------
         blocos_imprimir_relatorio()
-
 
 # -----------------------------
 # ROTAS / PAGES
