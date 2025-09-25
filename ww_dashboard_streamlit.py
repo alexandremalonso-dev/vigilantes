@@ -1007,30 +1007,31 @@ with col2:
     if not semana_obj:
         semana_obj = {"semana": semana_atual, "extras": 36.0, "pontos": []}
 
-    # O “banco” de pontos extras disponível atualmente
-    banco_extras = float(semana_obj.get("extras", 36.0))
-
-    # Máximo possível, incluindo pontos ganhos por atividades
+    # Total inicial + pontos ganhos por atividades
     pontos_atividade_semana = sum(
         a.get('pontos', 0.0)
         for dia_str, lst in st.session_state.activities.items()
         for a in lst
         if iso_week_number(datetime.datetime.strptime(dia_str, "%Y-%m-%d").date() if isinstance(dia_str, str) else dia_str) == semana_atual
     )
-    max_extras = 36.0 + pontos_atividade_semana
+    total_banco = 36.0 + pontos_atividade_semana
+
+    # Valor usado até agora
+    usados = total_banco - float(semana_obj.get("extras", 36.0))
+    # Agora o gauge começa em 0 e cresce conforme o usuário consome
 
     fig2 = go.Figure(go.Indicator(
         mode="gauge+number",
-        value=banco_extras,
-        number={'suffix': f" / {max_extras:.0f}"},
-        gauge={'axis': {'range': [0, max_extras]},
+        value=usados,
+        number={'suffix': f" / {total_banco:.0f}"},
+        gauge={'axis': {'range': [0, total_banco]},
                'bar': {'color': "#006400"},
                'steps': [
-                   {'range': [0, max_extras/3], 'color': "#e74c3c"},
-                   {'range': [max_extras/3, 2*max_extras/3], 'color': "#f1c40f"},
-                   {'range': [2*max_extras/3, max_extras], 'color': "#2ecc71"}
+                   {'range': [0, total_banco/3], 'color': "#e74c3c"},
+                   {'range': [total_banco/3, 2*total_banco/3], 'color': "#f1c40f"},
+                   {'range': [2*total_banco/3, total_banco], 'color': "#2ecc71"}
                ]},
-        title={'text': "Banco de Pontos Extras Disponíveis (semana)"}
+        title={'text': "Banco de Pontos Extras (usados / total)"}
     ))
     st.plotly_chart(fig2, use_container_width=True)
 
