@@ -98,7 +98,19 @@ def weekday_name_br(dt: datetime.date):
 # -----------------------------
 # LOGIN / USUÁRIOS
 # -----------------------------
+if "logged_in" not in st.session_state:
+    st.session_state.logged_in = False
+if "current_user" not in st.session_state:
+    st.session_state.current_user = ""
+
+# Carrega usuários globais
+USERS_FILE = "ww_users.json"
+users_store = load_data(USERS_FILE)
+if not isinstance(users_store, dict):
+    users_store = {}
+
 def login_user(email, password):
+    global users_store
     if email in users_store and users_store[email]["password"] == password:
         st.session_state.logged_in = True
         st.session_state.current_user = email
@@ -139,14 +151,18 @@ def login_user(email, password):
         st.error("Email ou senha incorretos.")
         return False
 
-# -----------------------------
-# FLAGS DE LOGIN (garantia de inicialização)
-# -----------------------------
-if "logged_in" not in st.session_state:
-    st.session_state.logged_in = False
-if "current_user" not in st.session_state:
-    st.session_state.current_user = ""
-    
+def register_user(email, password):
+    global users_store
+    if email in users_store:
+        st.error("Usuário já existe!")
+        return False
+    users_store[email] = {"password": password}
+    save_data(users_store, USERS_FILE)
+    st.session_state.logged_in = True
+    st.session_state.current_user = email
+    st.success(f"Cadastro realizado com sucesso! Bem-vindo(a), {email}!")
+    return True
+
 # -----------------------------
 # INTERFACE DE LOGIN
 # -----------------------------
