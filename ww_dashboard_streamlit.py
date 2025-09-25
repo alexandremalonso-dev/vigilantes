@@ -115,12 +115,11 @@ def login_user(email, password):
         st.session_state.current_user = email
 
         # -----------------------------
-        # Arquivos do usuário (apenas após login)
+        # Arquivos do usuário (somente após login)
         # -----------------------------
         USER_DATA_FILE = f"data_{email}.json"
         ACTIVITY_FILE = f"activities_{email}.json"
 
-        # Carregar dados
         data_store = load_data(USER_DATA_FILE) or {}
         activities_store = load_data(ACTIVITY_FILE) or {}
 
