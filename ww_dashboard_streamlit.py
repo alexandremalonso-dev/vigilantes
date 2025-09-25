@@ -373,35 +373,34 @@ for label, key in menu_itens:
 
             st.sidebar.success(f"✅ Semana {semana_atual} resetada com sucesso!")
 
-# -----------------------------
-# AÇÃO SAIR (logout) - VERSÃO CORRIGIDA
-# -----------------------------
-elif key == "🚪 Sair":
-    # Apenas desloga o usuário, sem apagar referência dele
-    st.session_state.logged_in = False
-    
-    # 🔒 Mantém current_user definido, apenas marca como deslogado
-    # (assim, os arquivos privados continuam atrelados ao usuário correto)
-    # st.session_state.current_user = ""  # ❌ REMOVIDO
+        # -----------------------------
+        # AÇÃO SAIR (logout) - CORRIGIDA
+        # -----------------------------
+        elif key == "🚪 Sair":
+            # Apenas desloga o usuário, sem apagar referência dele
+            st.session_state.logged_in = False
 
-    # Remove apenas dados voláteis da sessão (não toca no ww_users.json nem no cadastro)
-    private_keys = [
-        "peso", "datas_peso", "consumo_historico",
-        "pontos_semana", "consumo_diario", "extras",
-        "activities"
-    ]
-    for k in private_keys:
-        if k in st.session_state:
-            del st.session_state[k]
+            # ❌ NÃO apaga mais o current_user
+            # st.session_state.current_user = ""
 
-    # Mantém alimentos globais intactos
-    # st.session_state.alimentos continua disponível
+            # Remove apenas dados voláteis da sessão
+            private_keys = [
+                "peso", "datas_peso", "consumo_historico",
+                "pontos_semana", "consumo_diario", "extras",
+                "activities"
+            ]
+            for k in private_keys:
+                if k in st.session_state:
+                    del st.session_state[k]
 
-    # Força recarregamento seguro
-    try:
-        st.experimental_rerun()
-    except Exception:
-        st.stop()  # fallback seguro no Streamlit Cloud
+            # Mantém alimentos globais intactos
+            # st.session_state.alimentos continua disponível
+
+            # Força recarregamento seguro
+            try:
+                st.experimental_rerun()
+            except Exception:
+                st.stop()  # fallback seguro
 
 # -----------------------------
 # CADASTRAR ALIMENTO AJUSTADO
