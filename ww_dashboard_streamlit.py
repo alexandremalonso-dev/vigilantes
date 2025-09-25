@@ -1049,237 +1049,231 @@ def consultar_alimento():
 
 
 # -----------------------------
-# DASHBOARD PRINCIPAL
+# DASHBOARD PRINCIPAL COMPLETO COM HISTÓRICOS E PERFIL
 # -----------------------------
-if st.session_state.menu == "🏠 Dashboard":
-    st.markdown("<h1 style='text-align: center; color: #2c3e50;'>🍏 Vigilantes do Peso Brasil</h1>", unsafe_allow_html=True)
+import datetime
+import plotly.graph_objects as go
+import numpy as np
+import pandas as pd
 
-    # Solicitar peso inicial se não houver
-    if not st.session_state.peso:
-        st.warning("⚖️ Por favor, registre seu peso inicial antes de usar o dashboard.")
-        registrar_peso()
-        st.stop()
-
-# -----------------------------
-# Preencher Perfil do Usuário (se não existir)
-# -----------------------------
-if not all(k in st.session_state for k in ["sexo", "idade", "altura", "objetivo", "nivel_atividade"]):
-    st.warning("⚠️ Complete seu perfil para calcular a meta diária de pontos.")
+# Solicitar preenchimento do perfil caso algum campo esteja vazio
+if not all([st.session_state.sexo, st.session_state.idade, st.session_state.altura,
+            st.session_state.objetivo, st.session_state.nivel_atividade]):
+    st.warning("⚠️ Complete seu perfil para usar o aplicativo corretamente.")
     with st.form("form_perfil_usuario"):
-        sexo = st.selectbox("Sexo", ["M", "F"])
-        idade = st.number_input("Idade", min_value=1, max_value=120, value=30, step=1)
-        altura = st.number_input("Altura (cm)", min_value=100, max_value=250, value=170, step=1)
-        objetivo = st.selectbox("Objetivo", ["perder peso", "manter peso", "ganhar peso"])
-        nivel_atividade = st.selectbox("Nível de atividade", ["sedentário", "leve", "moderado", "ativo", "muito ativo"])
-        submitted = st.form_submit_button("Salvar Perfil")
-
-        if submitted:
+        sexo = st.selectbox("Sexo", ["M", "F"], index=0 if st.session_state.sexo is None else ["M","F"].index(st.session_state.sexo))
+        idade = st.number_input("Idade", min_value=1, max_value=120, value=st.session_state.idade or 30)
+        altura = st.number_input("Altura (cm)", min_value=100, max_value=250, value=st.session_state.altura or 170)
+        objetivo = st.selectbox("Objetivo", ["perder peso", "manter peso", "ganhar peso"],
+                                index=0 if st.session_state.objetivo is None else ["perder peso","manter peso","ganhar peso"].index(st.session_state.objetivo))
+        nivel_atividade = st.selectbox("Nível de atividade", ["sedentário","leve","moderado","ativo","muito ativo"],
+                                       index=0 if st.session_state.nivel_atividade is None else ["sedentário","leve","moderado","ativo","muito ativo"].index(st.session_state.nivel_atividade))
+        submit = st.form_submit_button("Salvar Perfil")
+        if submit:
             st.session_state.sexo = sexo
             st.session_state.idade = idade
             st.session_state.altura = altura
             st.session_state.objetivo = objetivo
             st.session_state.nivel_atividade = nivel_atividade
+            # recalcula meta diária após salvar perfil
+            st.session_state.meta_diaria = calcular_meta_diaria(
+                sexo=st.session_state.sexo,
+                idade=st.session_state.idade,
+                peso=st.session_state.peso[-1] if st.session_state.peso else 70,
+                altura=st.session_state.altura,
+                nivel_atividade=st.session_state.nivel_atividade,
+                objetivo=st.session_state.objetivo
+            )
             st.success("Perfil salvo com sucesso!")
-            st.experimental_rerun()  # força atualização da interface
+            st.experimental_rerun()
+    st.stop()  # bloqueia execução até preencher
 
-    # -----------------------------
-    # Atualiza meta diária automaticamente
-    # -----------------------------
-    if all(k in st.session_state for k in ["sexo", "idade", "altura", "objetivo", "nivel_atividade"]):
-        st.session_state.meta_diaria = calcular_meta_diaria(
-            sexo=st.session_state.sexo,
-            idade=st.session_state.idade,
-            peso=st.session_state.peso[-1] if st.session_state.peso else 70,
-            altura=st.session_state.altura,
-            objetivo=st.session_state.objetivo,
-            nivel_atividade=st.session_state.nivel_atividade
-        )
+# Garantir semana atual e recalcular a partir do histórico
+ensure_current_week_exists()
+rebuild_pontos_semana_from_history()
+
+st.markdown("<h1 style='text-align: center; color: #2c3e50;'>🍏 Vigilantes do Peso Brasil</h1>", unsafe_allow_html=True)
+
+peso_atual = st.session_state.peso[-1] if st.session_state.peso else 0.0
+semana_atual = iso_week_number(datetime.date.today())
+semana_obj = next((w for w in st.session_state.pontos_semana if w["semana"] == semana_atual), None)
+if not semana_obj:
+    semana_obj = {"semana": semana_atual, "extras": 36.0, "pontos": []}
+    st.session_state.pontos_semana.append(semana_obj)
+
+# -----------------------------
+# Indicadores principais (gráficos)
+# -----------------------------
+col1, col2, col3 = st.columns(3)
+
+# Consumo Diário
+with col1:
+    meta_diaria = st.session_state.meta_diaria
+    consumo_diario = float(st.session_state.consumo_diario)
+    fig1 = go.Figure(go.Indicator(
+        mode="gauge+number",
+        value=consumo_diario,
+        number={'suffix': f" / {meta_diaria}"},
+        gauge={'axis': {'range': [0, meta_diaria]},
+               'bar': {'color': "#e74c3c"},
+               'steps': [
+                   {'range': [0, meta_diaria * 0.7], 'color': "#2ecc71"},
+                   {'range': [meta_diaria * 0.7, meta_diaria], 'color': "#f1c40f"}
+               ]},
+        title={'text': "Pontos Consumidos"}))
+    st.plotly_chart(fig1, use_container_width=True)
+
+# Banco de Pontos Extras
+with col2:
+    pontos_atividade_semana = sum(
+        a.get('pontos', 0.0)
+        for dia_str, lst in st.session_state.activities.items()
+        for a in lst
+        if iso_week_number(datetime.datetime.strptime(dia_str, "%Y-%m-%d").date() if isinstance(dia_str, str) else dia_str) == semana_atual
+    )
+    total_banco = 36.0 + pontos_atividade_semana
+    usados = total_banco - float(semana_obj.get("extras", 36.0))
+    fig2 = go.Figure(go.Indicator(
+        mode="gauge+number",
+        value=usados,
+        number={'suffix': f" / {total_banco:.0f}"},
+        gauge={'axis': {'range': [0, total_banco]},
+               'bar': {'color': "#006400"},
+               'steps': [
+                   {'range': [0, total_banco/3], 'color': "#e74c3c"},
+                   {'range': [total_banco/3, 2*total_banco/3], 'color': "#f1c40f"},
+                   {'range': [2*total_banco/3, total_banco], 'color': "#2ecc71"}
+               ]},
+        title={'text': "Usado / Total (Pontos Extras)"}
+    ))
+    st.plotly_chart(fig2, use_container_width=True)
+
+# Peso Atual
+with col3:
+    if len(st.session_state.peso) <= 1:
+        cor_gauge = "blue"
+        tendencia = "➖"
     else:
-        # Caso dados do perfil não preenchidos, mantém valor padrão
-        st.session_state.meta_diaria = st.session_state.get("meta_diaria", 29)
-
-    # Garantir semana atual e recalcular a partir do histórico
-    ensure_current_week_exists()
-    rebuild_pontos_semana_from_history()
-
-    peso_atual = st.session_state.peso[-1] if st.session_state.peso else 0.0
-    semana_atual = iso_week_number(datetime.date.today())
-    semana_obj = next((w for w in st.session_state.pontos_semana if w["semana"] == semana_atual), None)
-    if not semana_obj:
-        semana_obj = {"semana": semana_atual, "extras": 36.0, "pontos": []}
-        st.session_state.pontos_semana.append(semana_obj)
-
-    # -----------------------------
-    # Indicadores principais (gráficos)
-    # -----------------------------
-    col1, col2, col3 = st.columns(3)
-
-    # Consumo Diário
-    with col1:
-        meta_diaria = st.session_state.meta_diaria
-        consumo_diario = float(st.session_state.consumo_diario)
-        fig1 = go.Figure(go.Indicator(
-            mode="gauge+number",
-            value=consumo_diario,
-            number={'suffix': f" / {meta_diaria}"},
-            gauge={'axis': {'range': [0, meta_diaria]},
-                   'bar': {'color': "#e74c3c"},
-                   'steps': [
-                       {'range': [0, meta_diaria * 0.7], 'color': "#2ecc71"},
-                       {'range': [meta_diaria * 0.7, meta_diaria], 'color': "#f1c40f"}
-                   ]},
-            title={'text': "Pontos Consumidos"}))
-        st.plotly_chart(fig1, use_container_width=True)
-
-    # Banco de Pontos Extras
-    with col2:
-        pontos_atividade_semana = sum(
-            a.get('pontos', 0.0)
-            for dia_str, lst in st.session_state.activities.items()
-            for a in lst
-            if iso_week_number(datetime.datetime.strptime(dia_str, "%Y-%m-%d").date() if isinstance(dia_str, str) else dia_str) == semana_atual
-        )
-        total_banco = 36.0 + pontos_atividade_semana
-        usados = total_banco - float(semana_obj.get("extras", 36.0))
-        fig2 = go.Figure(go.Indicator(
-            mode="gauge+number",
-            value=usados,
-            number={'suffix': f" / {total_banco:.0f}"},
-            gauge={'axis': {'range': [0, total_banco]},
-                   'bar': {'color': "#006400"},
-                   'steps': [
-                       {'range': [0, total_banco/3], 'color': "#e74c3c"},
-                       {'range': [total_banco/3, 2*total_banco/3], 'color': "#f1c40f"},
-                       {'range': [2*total_banco/3, total_banco], 'color': "#2ecc71"}
-                   ]},
-            title={'text': "Usado / Total (Pontos Extras)"}
-        ))
-        st.plotly_chart(fig2, use_container_width=True)
-
-    # Peso Atual
-    with col3:
-        if len(st.session_state.peso) <= 1:
+        if st.session_state.peso[-1] < st.session_state.peso[-2]:
+            cor_gauge = "green"
+            tendencia = "⬇️"
+        elif st.session_state.peso[-1] > st.session_state.peso[-2]:
+            cor_gauge = "orange"
+            tendencia = "⬆️"
+        else:
             cor_gauge = "blue"
             tendencia = "➖"
-        else:
-            if st.session_state.peso[-1] < st.session_state.peso[-2]:
-                cor_gauge = "green"
-                tendencia = "⬇️"
-            elif st.session_state.peso[-1] > st.session_state.peso[-2]:
-                cor_gauge = "orange"
-                tendencia = "⬆️"
-            else:
-                cor_gauge = "blue"
-                tendencia = "➖"
 
-        min_axis = min(st.session_state.peso) - 5 if st.session_state.peso else 0
-        max_axis = max(st.session_state.peso) + 5 if st.session_state.peso else 100
-        fig_gauge = go.Figure(go.Indicator(
-            mode="gauge+number",
-            value=peso_atual,
-            gauge={'axis': {'range': [min_axis, max_axis]},
-                   'bar': {'color': cor_gauge}} ,
-            title={'text': f"Peso Atual {tendencia}"}
-        ))
-        st.plotly_chart(fig_gauge, use_container_width=True)
+    min_axis = min(st.session_state.peso) - 5 if st.session_state.peso else 0
+    max_axis = max(st.session_state.peso) + 5 if st.session_state.peso else 100
+    fig_gauge = go.Figure(go.Indicator(
+        mode="gauge+number",
+        value=peso_atual,
+        gauge={'axis': {'range': [min_axis, max_axis]},
+               'bar': {'color': cor_gauge}} ,
+        title={'text': f"Peso Atual {tendencia}"}
+    ))
+    st.plotly_chart(fig_gauge, use_container_width=True)
 
-    # -----------------------------
-    # Históricos (Pontos Semanais, Atividades, Peso)
-    # -----------------------------
-    col_hist1, col_hist2, col_hist3 = st.columns(3)
+# -----------------------------
+# Chamar função de registrar peso (permite histórico)
+# -----------------------------
+registrar_peso()
 
-    # Pontos Semanais
-    with col_hist1:
-        st.markdown("### 📊 Pontos Semanais")
-        all_pontos = [reg for w in st.session_state.pontos_semana for reg in w.get("pontos", [])]
-        if not all_pontos:
-            st.write(" - (sem registros)")
-        else:
-            for reg in sorted(all_pontos, key=lambda x: x["data"]):
-                dia = reg["data"].strftime("%d/%m/%Y") if isinstance(reg["data"], datetime.date) else str(reg["data"])
-                dia_sem = weekday_name_br(reg["data"]) if isinstance(reg["data"], datetime.date) else ""
-                usados = f" - usou extras: {reg.get('usou_extras',0.0):.2f} pts" if reg.get("usou_extras", 0.0) else ""
-                st.markdown(
-                    f"<div style='padding:10px; border:1px solid #f39c12; border-radius:5px; margin-bottom:5px;'>{dia} ({dia_sem}): {reg['nome']} {reg['quantidade']:.2f} min ({reg['pontos']:.2f} pts){usados}</div>",
-                    unsafe_allow_html=True
-                )
+# -----------------------------
+# Históricos (abaixo dos gráficos)
+# -----------------------------
+col_hist1, col_hist2, col_hist3 = st.columns(3)
 
-    # Histórico de Atividades Físicas
-    with col_hist2:
-        st.markdown("### 🏃 Histórico de Atividades Físicas")
-        if st.session_state.activities:
-            acts_list = [(d, a['tipo'], a['minutos'], a['pontos']) 
-                         for d, lst in st.session_state.activities.items() for a in lst]
-            if acts_list:
-                acts_list_sorted = sorted(acts_list, key=lambda x: x[0])
-                for d, tipo, minutos, pontos in acts_list_sorted:
-                    st.markdown(
-                        f"<div style='padding:10px; border:1px solid #1abc9c; border-radius:5px; margin-bottom:5px;'>{d}: {tipo} - {minutos:.2f} min ({pontos:.2f} pts)</div>",
-                        unsafe_allow_html=True
-                    )
-        else:
-            st.info("Nenhuma atividade registrada ainda.")
-
-    # Histórico de Peso
-    with col_hist3:
-        st.markdown("### ⚖️ Histórico de Peso")
-        for i, (p, d) in enumerate(zip(st.session_state.peso, st.session_state.datas_peso)):
-            if i == 0:
-                tendencia = "➖"
-            else:
-                if p < st.session_state.peso[i - 1]:
-                    tendencia = "⬇️"
-                elif p > st.session_state.peso[i - 1]:
-                    tendencia = "⬆️"
-                else:
-                    tendencia = "➖"
+# Pontos Semanais
+with col_hist1:
+    st.markdown("### 📊 Pontos Semanais")
+    all_pontos = [reg for w in st.session_state.pontos_semana for reg in w.get("pontos", [])]
+    if not all_pontos:
+        st.write(" - (sem registros)")
+    else:
+        for reg in sorted(all_pontos, key=lambda x: x["data"]):
+            dia = reg["data"].strftime("%d/%m/%Y") if isinstance(reg["data"], datetime.date) else str(reg["data"])
+            dia_sem = weekday_name_br(reg["data"]) if isinstance(reg["data"], datetime.date) else ""
+            usados = f" - usou extras: {reg.get('usou_extras',0.0):.2f} pts" if reg.get("usou_extras", 0.0) else ""
             st.markdown(
-                f"<div style='padding:10px; border:1px solid #3498db; border-radius:5px; margin-bottom:5px;'>{d.strftime('%d/%m/%Y')}: {p:.2f} kg {tendencia}</div>",
+                f"<div style='padding:10px; border:1px solid #f39c12; border-radius:5px; margin-bottom:5px;'>{dia} ({dia_sem}): {reg['nome']} {reg['quantidade']:.2f} min ({reg['pontos']:.2f} pts){usados}</div>",
                 unsafe_allow_html=True
             )
 
-    # -----------------------------
-    # Tendência de Peso (linha de tendência)
-    # -----------------------------
-    import numpy as np
-    import pandas as pd
-
-    if st.session_state.peso and st.session_state.datas_peso:
-        if len(st.session_state.peso) == len(st.session_state.datas_peso):
-            df_peso = pd.DataFrame({
-                "Data": st.session_state.datas_peso,
-                "Peso": st.session_state.peso
-            })
-            df_peso["Data_dt"] = pd.to_datetime(df_peso["Data"])
-
-            if len(df_peso) >= 2:
-                x_ord = np.array([d.toordinal() for d in df_peso["Data_dt"]])
-                y = np.array(df_peso["Peso"])
-                m, b = np.polyfit(x_ord, y, 1)
-                y_trend = m * x_ord + b
-                mode_plot = "lines+markers"
-            else:
-                y_trend = np.array(df_peso["Peso"])
-                mode_plot = "markers"
-
-            fig_line = go.Figure(
-                go.Scatter(
-                    x=df_peso["Data_dt"].tolist(),
-                    y=y_trend.tolist(),
-                    mode=mode_plot,
-                    line=dict(color="#8e44ad", width=3)
+# Histórico de Atividades Físicas
+with col_hist2:
+    st.markdown("### 🏃 Histórico de Atividades Físicas")
+    if st.session_state.activities:
+        acts_list = [(d, a['tipo'], a['minutos'], a['pontos']) 
+                     for d, lst in st.session_state.activities.items() for a in lst]
+        if acts_list:
+            acts_list_sorted = sorted(acts_list, key=lambda x: x[0])
+            for d, tipo, minutos, pontos in acts_list_sorted:
+                st.markdown(
+                    f"<div style='padding:10px; border:1px solid #1abc9c; border-radius:5px; margin-bottom:5px;'>{d}: {tipo} - {minutos:.2f} min ({pontos:.2f} pts)</div>",
+                    unsafe_allow_html=True
                 )
-            )
-            fig_line.update_layout(
-                yaxis_title="Peso (kg)",
-                xaxis_title="Data",
-                template="plotly_white"
-            )
-            st.plotly_chart(fig_line, use_container_width=True)
-        else:
-            st.warning("Erro: número de datas e pesos não coincidem.")
     else:
-        st.info("Registre pelo menos um peso para ver a tendência.")
+        st.info("Nenhuma atividade registrada ainda.")
+
+# Histórico de Peso
+with col_hist3:
+    st.markdown("### ⚖️ Histórico de Peso")
+    for i, (p, d) in enumerate(zip(st.session_state.peso, st.session_state.datas_peso)):
+        if i == 0:
+            tendencia = "➖"
+        else:
+            if p < st.session_state.peso[i - 1]:
+                tendencia = "⬇️"
+            elif p > st.session_state.peso[i - 1]:
+                tendencia = "⬆️"
+            else:
+                tendencia = "➖"
+        st.markdown(
+            f"<div style='padding:10px; border:1px solid #3498db; border-radius:5px; margin-bottom:5px;'>{d.strftime('%d/%m/%Y')}: {p:.2f} kg {tendencia}</div>",
+            unsafe_allow_html=True
+        )
+
+# -----------------------------
+# Tendência de Peso (linha de tendência)
+# -----------------------------
+if st.session_state.peso and st.session_state.datas_peso:
+    if len(st.session_state.peso) == len(st.session_state.datas_peso):
+        df_peso = pd.DataFrame({
+            "Data": st.session_state.datas_peso,
+            "Peso": st.session_state.peso
+        })
+        df_peso["Data_dt"] = pd.to_datetime(df_peso["Data"])
+
+        if len(df_peso) >= 2:
+            x_ord = np.array([d.toordinal() for d in df_peso["Data_dt"]])
+            y = np.array(df_peso["Peso"])
+            m, b = np.polyfit(x_ord, y, 1)
+            y_trend = m * x_ord + b
+            mode_plot = "lines+markers"
+        else:
+            y_trend = np.array(df_peso["Peso"])
+            mode_plot = "markers"
+
+        fig_line = go.Figure(
+            go.Scatter(
+                x=df_peso["Data_dt"].tolist(),
+                y=y_trend.tolist(),
+                mode=mode_plot,
+                line=dict(color="#8e44ad", width=3)
+            )
+        )
+        fig_line.update_layout(
+            yaxis_title="Peso (kg)",
+            xaxis_title="Data",
+            template="plotly_white"
+        )
+        st.plotly_chart(fig_line, use_container_width=True)
+    else:
+        st.warning("Erro: número de datas e pesos não coincidem.")
+else:
+    st.info("Registre pelo menos um peso para ver a tendência.")
 
 
 # -----------------------------
