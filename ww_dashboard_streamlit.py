@@ -1314,11 +1314,20 @@ import streamlit as st
 import datetime
 
 # -----------------------------
-# Função auxiliar: instrução para imprimir
+# Função auxiliar: botão imprimir via navegador
 # -----------------------------
 def blocos_imprimir_relatorio():
-    st.markdown("### 🖨️ Imprimir Relatório")
-    st.info("Para gerar PDF, use a função de imprimir do seu navegador: `Ctrl+P` (Windows) ou `Cmd+P` (Mac).")
+    st.markdown("### 🖨️ Gerar Relatório")
+    
+    st.markdown(
+        """
+        <button onclick="window.print()" 
+                style="padding:10px 20px; font-size:16px; background-color:#2ecc71; color:white; border:none; border-radius:5px; cursor:pointer;">
+            Gerar Relatório
+        </button>
+        """,
+        unsafe_allow_html=True
+    )
 
 # -----------------------------
 # Página Históricos Acumulados
@@ -1408,7 +1417,7 @@ def historico_acumulado_page():
                     st.write(f"{d.strftime('%d/%m/%Y')}: {a['tipo']} — {a['minutos']} min — {a['pontos']} pts")
 
         # -----------------------------
-        # BLOCO 4: Instrução de Impressão
+        # BLOCO 4: Botão Gerar Relatório / Imprimir
         # -----------------------------
         blocos_imprimir_relatorio()
 
