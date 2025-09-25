@@ -686,10 +686,12 @@ def registrar_consumo():
 # -----------------------------
 # FUNÇÃO REGISTRAR PESO
 # -----------------------------
+# -----------------------------
+# REGISTRAR PESO AJUSTADO COM META DIÁRIA
+# -----------------------------
 def registrar_peso():
     st.header("⚖️ Registrar Peso")
 
-    # Inicializa flags e listas
     if "mostrar_historico_peso" not in st.session_state:
         st.session_state.mostrar_historico_peso = False
     if "peso" not in st.session_state:
@@ -697,25 +699,33 @@ def registrar_peso():
     if "datas_peso" not in st.session_state:
         st.session_state.datas_peso = []
 
-    # Formulário para registrar peso
     with st.form("form_peso"):
-        peso_novo = st.number_input(
-            "Informe seu peso (kg):",
-            min_value=0.0,
-            step=0.1,
-            format="%.2f",
-            key="input_peso_reg"
-        )
+        peso_novo = st.number_input("Informe seu peso (kg):", min_value=0.0, step=0.1, format="%.2f")
+        altura = st.number_input("Altura (cm):", min_value=50, max_value=250, value=170)
+        idade = st.number_input("Idade (anos):", min_value=10, max_value=120, value=30)
+        sexo = st.selectbox("Sexo:", ["M", "F"])
+        objetivo = st.selectbox("Objetivo:", ["perder", "manter", "ganhar"])
+        nivel_atividade = st.selectbox("Nível de atividade:", ["sedentario", "leve", "moderado", "alto"], index=2)
         submitted = st.form_submit_button("Registrar peso")
 
         if submitted:
             st.session_state.peso.append(float(peso_novo))
             st.session_state.datas_peso.append(datetime.date.today())
+
+            # Calcula meta diária baseada no perfil do usuário
+            st.session_state.meta_diaria = calcular_meta_diaria(
+                peso=peso_novo,
+                altura=altura,
+                idade=idade,
+                sexo=sexo,
+                objetivo=objetivo,
+                nivel_atividade=nivel_atividade
+            )
+
             persist_all()
-            st.success(f"Peso {peso_novo:.2f} kg registrado com sucesso!")
-            # ativa flag para exibir histórico
+            st.success(f"Peso registrado: {peso_novo:.2f} kg. Meta diária WW: {st.session_state.meta_diaria} pontos")
             st.session_state.mostrar_historico_peso = True
-            st.stop()  # força atualização dinâmica do histórico
+            st.stop()
 
     # Histórico de pesos
     with st.expander("Histórico de Pesos", expanded=st.session_state.mostrar_historico_peso):
@@ -1005,76 +1015,83 @@ if st.session_state.menu == "🏠 Dashboard":
     # -----------------------------
     # Indicadores principais (gráficos)
     # -----------------------------
-    col1, col2, col3 = st.columns(3)
+# -----------------------------
+# INDICADORES PRINCIPAIS NO DASHBOARD
+# -----------------------------
+col1, col2, col3 = st.columns(3)
 
-    # Consumo Diário
-    with col1:
-        meta_diaria = st.session_state.meta_diaria
-        consumo_diario = float(st.session_state.consumo_diario)
-        fig1 = go.Figure(go.Indicator(
-            mode="gauge+number",
-            value=consumo_diario,
-            number={'suffix': f" / {meta_diaria}"},
-            gauge={'axis': {'range': [0, meta_diaria]},
-                   'bar': {'color': "#e74c3c"},
-                   'steps': [
-                       {'range': [0, meta_diaria * 0.7], 'color': "#2ecc71"},
-                       {'range': [meta_diaria * 0.7, meta_diaria], 'color': "#f1c40f"}
-                   ]},
-            title={'text': "Pontos Consumidos"}))
-        st.plotly_chart(fig1, use_container_width=True)
+# Consumo Diário
+with col1:
+    meta_diaria = st.session_state.meta_diaria
+    consumo_diario = float(st.session_state.consumo_diario)
+    fig1 = go.Figure(go.Indicator(
+        mode="gauge+number",
+        value=consumo_diario,
+        number={'suffix': f" / {meta_diaria}"},
+        gauge={'axis': {'range': [0, meta_diaria]},
+               'bar': {'color': "#e74c3c"},
+               'steps': [
+                   {'range': [0, meta_diaria * 0.7], 'color': "#2ecc71"},
+                   {'range': [meta_diaria * 0.7, meta_diaria], 'color': "#f1c40f"}
+               ]},
+        title={'text': "Pontos Consumidos"}
+    ))
+    st.plotly_chart(fig1, use_container_width=True)
 
-    # Banco de Pontos Extras
-    with col2:
-        pontos_atividade_semana = sum(
-            a.get('pontos', 0.0)
-            for dia_str, lst in st.session_state.activities.items()
-            for a in lst
-            if iso_week_number(datetime.datetime.strptime(dia_str, "%Y-%m-%d").date() if isinstance(dia_str, str) else dia_str) == semana_atual
-        )
-        total_banco = 36.0 + pontos_atividade_semana
-        usados = total_banco - float(semana_obj.get("extras", 36.0))
-        fig2 = go.Figure(go.Indicator(
-            mode="gauge+number",
-            value=usados,
-            number={'suffix': f" / {total_banco:.0f}"},
-            gauge={'axis': {'range': [0, total_banco]},
-                   'bar': {'color': "#006400"},
-                   'steps': [
-                       {'range': [0, total_banco/3], 'color': "#e74c3c"},
-                       {'range': [total_banco/3, 2*total_banco/3], 'color': "#f1c40f"},
-                       {'range': [2*total_banco/3, total_banco], 'color': "#2ecc71"}
-                   ]},
-            title={'text': "Usado / Total (Pontos Extras)"}
-        ))
-        st.plotly_chart(fig2, use_container_width=True)
+# Banco de Pontos Extras
+with col2:
+    pontos_atividade_semana = sum(
+        a.get('pontos', 0.0)
+        for dia_str, lst in st.session_state.activities.items()
+        for a in lst
+        if iso_week_number(datetime.datetime.strptime(dia_str, "%Y-%m-%d").date() if isinstance(dia_str, str) else dia_str) == iso_week_number(datetime.date.today())
+    )
+    total_banco = 36.0 + pontos_atividade_semana
+    semana_atual = iso_week_number(datetime.date.today())
+    semana_obj = next((w for w in st.session_state.pontos_semana if w["semana"] == semana_atual), {"extras": 36.0})
+    usados = total_banco - float(semana_obj.get("extras", 36.0))
+    fig2 = go.Figure(go.Indicator(
+        mode="gauge+number",
+        value=usados,
+        number={'suffix': f" / {total_banco:.0f}"},
+        gauge={'axis': {'range': [0, total_banco]},
+               'bar': {'color': "#006400"},
+               'steps': [
+                   {'range': [0, total_banco/3], 'color': "#e74c3c"},
+                   {'range': [total_banco/3, 2*total_banco/3], 'color': "#f1c40f"},
+                   {'range': [2*total_banco/3, total_banco], 'color': "#2ecc71"}
+               ]},
+        title={'text': "Usado / Total (Pontos Extras)"}
+    ))
+    st.plotly_chart(fig2, use_container_width=True)
 
-    # Peso Atual
-    with col3:
-        if len(st.session_state.peso) <= 1:
+# Peso Atual
+with col3:
+    if len(st.session_state.peso) <= 1:
+        cor_gauge = "blue"
+        tendencia = "➖"
+    else:
+        if st.session_state.peso[-1] < st.session_state.peso[-2]:
+            cor_gauge = "green"
+            tendencia = "⬇️"
+        elif st.session_state.peso[-1] > st.session_state.peso[-2]:
+            cor_gauge = "orange"
+            tendencia = "⬆️"
+        else:
             cor_gauge = "blue"
             tendencia = "➖"
-        else:
-            if st.session_state.peso[-1] < st.session_state.peso[-2]:
-                cor_gauge = "green"
-                tendencia = "⬇️"
-            elif st.session_state.peso[-1] > st.session_state.peso[-2]:
-                cor_gauge = "orange"
-                tendencia = "⬆️"
-            else:
-                cor_gauge = "blue"
-                tendencia = "➖"
 
-        min_axis = min(st.session_state.peso) - 5 if st.session_state.peso else 0
-        max_axis = max(st.session_state.peso) + 5 if st.session_state.peso else 100
-        fig_gauge = go.Figure(go.Indicator(
-            mode="gauge+number",
-            value=peso_atual,
-            gauge={'axis': {'range': [min_axis, max_axis]},
-                   'bar': {'color': cor_gauge}} ,
-            title={'text': f"Peso Atual {tendencia}"}
-        ))
-        st.plotly_chart(fig_gauge, use_container_width=True)
+    min_axis = min(st.session_state.peso) - 5 if st.session_state.peso else 0
+    max_axis = max(st.session_state.peso) + 5 if st.session_state.peso else 100
+    peso_atual = st.session_state.peso[-1] if st.session_state.peso else 0.0
+    fig_gauge = go.Figure(go.Indicator(
+        mode="gauge+number",
+        value=peso_atual,
+        gauge={'axis': {'range': [min_axis, max_axis]},
+               'bar': {'color': cor_gauge}},
+        title={'text': f"Peso Atual {tendencia}"}
+    ))
+    st.plotly_chart(fig_gauge, use_container_width=True)
 
     # -----------------------------
     # Históricos (SOMENTE no dashboard)
@@ -1432,6 +1449,47 @@ def historico_acumulado_page():
     # -----------------------------
     html_relatorio = gerar_html_relatorio(consumo_filtrado, atividades_filtrado, peso_filtrado, pontos_semana, data_inicio, data_fim, incluir_consumo, incluir_atividades)
     botao_download_html(html_relatorio)
+
+
+# -----------------------------
+# CÁLCULO META DIÁRIA WW
+# -----------------------------
+def calcular_meta_diaria(peso, altura, idade, sexo, objetivo, nivel_atividade):
+    """
+    Retorna a meta diária de pontos do usuário (aprox. WW SmartPoints).
+    Ajuste baseado na idade, sexo, peso, altura, nível de atividade e objetivo.
+    """
+    # Fator de sexo
+    if sexo.upper() == "M":
+        sexo_factor = 5
+    else:
+        sexo_factor = -161
+
+    # Taxa metabólica basal (Mifflin-St Jeor)
+    tmb = (10 * peso) + (6.25 * altura) - (5 * idade) + sexo_factor
+
+    # Fator de atividade
+    fatores_atividade = {
+        "sedentario": 1.2,
+        "leve": 1.375,
+        "moderado": 1.55,
+        "alto": 1.725
+    }
+    tdee = tmb * fatores_atividade.get(nivel_atividade.lower(), 1.2)
+
+    # Ajuste por objetivo
+    if objetivo.lower() == "perder":
+        tdee -= 500  # déficit calórico padrão
+    elif objetivo.lower() == "ganhar":
+        tdee += 500  # superávit calórico
+
+    # Conversão aproximada calorias → pontos WW (aprox. 1 ponto ≈ 50 kcal)
+    pontos = tdee / 50.0
+
+    # Ajuste mínimo/máximo conforme WW real (~28-30)
+    pontos = max(28, min(round_points(pontos), 30))
+
+    return pontos
 
 
 # -----------------------------
