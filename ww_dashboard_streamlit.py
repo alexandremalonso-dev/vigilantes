@@ -1170,7 +1170,7 @@ if st.session_state.peso and st.session_state.datas_peso:
             y_trend = m * x_ord + b
             mode_plot = "lines+markers"
         else:
-            # apenas um ponto → linha horizontal
+            # apenas um ponto → marcador
             y_trend = np.array(df_peso["Peso"])
             mode_plot = "markers"
 
