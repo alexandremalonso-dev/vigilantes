@@ -8,6 +8,8 @@ import re
 import os
 import sys
 from math import floor, ceil
+pip install pdfkit
+
 
 
 def rerun_streamlit():
