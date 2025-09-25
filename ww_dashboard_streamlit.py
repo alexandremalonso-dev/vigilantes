@@ -998,35 +998,36 @@ if st.session_state.menu == "🏠 Dashboard":
             title={'text': "Pontos Consumidos"}))
         st.plotly_chart(fig1, use_container_width=True)
 
-    # Pontos Extras (com atualização pelas atividades físicas da semana)
-    with col2:
-        st.markdown("### ⭐ Pontos Extras (semana)")
+# Pontos Extras (com atualização pelas atividades físicas da semana)
+with col2:
+    st.markdown("### ⭐ Pontos Extras (semana)")
 
-        extras_base = 36.0
-        pontos_atividade_semana = sum(
-            a.get('pontos', 0.0)
-            for dia_str, lst in st.session_state.activities.items()
-            for a in lst
-            if iso_week_number(datetime.datetime.strptime(dia_str, "%Y-%m-%d").date() if isinstance(dia_str, str) else dia_str) == semana_atual
-        )
+    extras_base = 36.0  # teto inicial
+    pontos_atividade_semana = sum(
+        a.get('pontos', 0.0)
+        for dia_str, lst in st.session_state.activities.items()
+        for a in lst
+        if iso_week_number(datetime.datetime.strptime(dia_str, "%Y-%m-%d").date() if isinstance(dia_str, str) else dia_str) == semana_atual
+    )
 
-        extras_val = float(semana_obj.get("extras", extras_base)) + float(pontos_atividade_semana)
-        max_val = max(extras_base, extras_val)
+    # Valor do gauge = o que realmente está disponível para o usuário
+    extras_val = float(semana_obj.get("extras", extras_base))  # já atualizado pelo rebuild
+    max_val = extras_base + pontos_atividade_semana  # teto ajustado
 
-        fig2 = go.Figure(go.Indicator(
-            mode="gauge+number",
-            value=extras_val,
-            number={'suffix': f" / {max_val:.0f}"},
-            gauge={'axis': {'range': [0, max_val]},
-                   'bar': {'color': "#006400"},
-                   'steps': [
-                       {'range': [0, max_val/3], 'color': "#e74c3c"},
-                       {'range': [max_val/3, 2*max_val/3], 'color': "#f1c40f"},
-                       {'range': [2*max_val/3, max_val], 'color': "#2ecc71"}
-                   ]},
-            title={'text': "Pontos Extras Disponíveis (semana)"}
-        ))
-        st.plotly_chart(fig2, use_container_width=True)
+    fig2 = go.Figure(go.Indicator(
+        mode="gauge+number",
+        value=extras_val,
+        number={'suffix': f" / {max_val:.0f}"},
+        gauge={'axis': {'range': [0, max_val]},
+               'bar': {'color': "#006400"},
+               'steps': [
+                   {'range': [0, max_val/3], 'color': "#e74c3c"},
+                   {'range': [max_val/3, 2*max_val/3], 'color': "#f1c40f"},
+                   {'range': [2*max_val/3, max_val], 'color': "#2ecc71"}
+               ]},
+        title={'text': "Pontos Extras Disponíveis (semana)"}
+    ))
+    st.plotly_chart(fig2, use_container_width=True)
 
     # Peso Atual
     with col3:
