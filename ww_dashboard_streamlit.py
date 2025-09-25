@@ -402,81 +402,7 @@ for label, key in menu_itens:
 
 
 # -----------------------------
-# FUNÇÃO IMPORTAR PLANILHA DE ALIMENTOS
-# -----------------------------
-def importar_planilha():
-    st.header("📂 Importar Alimentos")
-    uploaded_file = st.file_uploader("Escolha sua planilha (.xlsx ou .csv)", type=["xlsx", "csv"], key="uploader_import")
-    
-    if uploaded_file is not None:
-        try:
-            if uploaded_file.name.lower().endswith(".csv"):
-                df = pd.read_csv(uploaded_file)
-            else:
-                df = pd.read_excel(uploaded_file)
-            
-            alimentos_novos = []
-            for _, row in df.iterrows():
-                try:
-                    # Função auxiliar para pegar coluna com fallback
-                    def g(col_options, default=0):
-                        for c in col_options:
-                            if c in row.index:
-                                return row.get(c)
-                        return default
-
-                    nome = g(["nome", "Nome", "NAME"], "Alimento sem nome")
-                    porc_val = g(["porcao", "Porcao", "Porção", "porção"], 100)
-                    calorias = float(g(["calorias", "Calorias"], 0) or 0)
-                    carbo = float(g(["carbo", "Carbo", "carboidratos", "Carboidratos"], 0) or 0)
-                    gordura = float(g(["gordura", "Gordura"], 0) or 0)
-                    saturada = float(g(["saturada", "Saturada"], 0) or 0)
-                    fibra = float(g(["fibra", "Fibra"], 0) or 0)
-                    acucar = float(g(["açúcar", "Acúcar", "Acucar", "acucar"], 0) or 0)
-                    proteina = float(g(["proteina", "Proteína", "Proteínas"], 0) or 0)
-                    sodio_mg = float(g(["sodio_mg", "Sodio_mg", "sódio_mg", "Sódio_mg"], 0) or 0)
-
-                    try:
-                        porcao = safe_parse_porçao(porc_val)
-                    except Exception:
-                        porcao = 100.0
-
-                    # Identifica se é Zero Ponto
-                    zero_ponto = str(g(["Zero Ponto", "ZeroPonto", "zeroponto"], "não")).strip().lower() == "sim"
-
-                    # Cria o dicionário do alimento
-                    alimento = {
-                        "Nome": str(nome),
-                        "Porcao": porcao,
-                        "Calorias": round(calorias, 2),
-                        "Gordura": round(gordura, 2),
-                        "Saturada": round(saturada, 2),
-                        "Carbo": round(carbo, 2),
-                        "Fibra": round(fibra, 2),
-                        "Açúcar": round(acucar, 2),
-                        "Proteina": round(proteina, 2),
-                        "Sodio_mg": round(sodio_mg, 2),
-                        "Zero Ponto": "sim" if zero_ponto else "não"
-                    }
-
-                    # Calcula pontos usando a função oficial, respeitando Zero Ponto
-                    alimento["Pontos"] = calcular_pontos(alimento)
-
-                    alimentos_novos.append(alimento)
-
-                except Exception:
-                    continue
-
-            st.session_state.alimentos.extend(alimentos_novos)
-            persist_all()
-            st.success(f"📂 Importadas {len(alimentos_novos)} linhas. Total agora: {len(st.session_state.alimentos)} alimentos.")
-
-        except Exception as e:
-            st.error(f"Erro ao importar planilha: {e}\n(Se for .xlsx, instale openpyxl: pip install openpyxl)")
-
-
-# -----------------------------
-# CADASTRAR ALIMENTO (AJUSTADO)
+# CADASTRAR ALIMENTO AJUSTADO
 # -----------------------------
 def cadastrar_alimento():
     st.header("➕ Cadastrar Alimento")
@@ -493,9 +419,9 @@ def cadastrar_alimento():
     sodio_mg = st.number_input("Sódio (mg)", min_value=0.0, step=1.0)
     
     zero_pontos = st.checkbox("Este alimento tem 0 pontos?", key="cad_zero_points")
-
+    
     if st.button("Cadastrar"):
-        if not nome:
+        if not nome.strip():
             st.error("Informe o nome do alimento!")
             return
         
@@ -505,9 +431,8 @@ def cadastrar_alimento():
             st.error(f"Erro ao interpretar a porção: {e}")
             return
 
-        # Cria o dicionário do alimento
         alimento = {
-            "Nome": nome,
+            "Nome": nome.strip(),
             "Porcao": porcao,
             "Calorias": round(calorias, 2),
             "Gordura": round(gordura, 2),
@@ -523,19 +448,93 @@ def cadastrar_alimento():
         # Calcula pontos
         alimento["Pontos"] = calcular_pontos(alimento)
 
-        # ⚡ Adiciona à lista do session_state e mantém referência
-        st.session_state.alimentos.extend([alimento])
-
-        # Salva no JSON
-        persist_all()
+        # Adiciona ao session_state e salva no JSON global
+        if "alimentos" not in st.session_state:
+            st.session_state.alimentos = []
+        st.session_state.alimentos.append(alimento)
+        persist_all()  # salva globalmente
 
         st.success(f"Alimento '{nome}' cadastrado com sucesso! Pontos: {alimento['Pontos']}")
 
-        # Atualiza imediatamente todas as telas (como importação)
+        # Atualiza UI imediatamente
         try:
             rerun_streamlit()
         except Exception:
             st.stop()
+
+
+# -----------------------------
+# IMPORTAR PLANILHA DE ALIMENTOS AJUSTADO
+# -----------------------------
+def importar_planilha():
+    st.header("📂 Importar Alimentos")
+    uploaded_file = st.file_uploader("Escolha sua planilha (.xlsx ou .csv)", type=["xlsx", "csv"], key="uploader_import")
+    
+    if uploaded_file is not None:
+        try:
+            if uploaded_file.name.lower().endswith(".csv"):
+                df = pd.read_csv(uploaded_file)
+            else:
+                df = pd.read_excel(uploaded_file)
+            
+            alimentos_novos = []
+            for _, row in df.iterrows():
+                def g(col_options, default=0):
+                    for c in col_options:
+                        if c in row.index:
+                            return row.get(c)
+                    return default
+
+                nome = g(["nome", "Nome", "NAME"], "Alimento sem nome")
+                porc_val = g(["porcao", "Porcao", "Porção", "porção"], 100)
+                calorias = float(g(["calorias", "Calorias"], 0) or 0)
+                carbo = float(g(["carbo", "Carbo", "carboidratos", "Carboidratos"], 0) or 0)
+                gordura = float(g(["gordura", "Gordura"], 0) or 0)
+                saturada = float(g(["saturada", "Saturada"], 0) or 0)
+                fibra = float(g(["fibra", "Fibra"], 0) or 0)
+                acucar = float(g(["açúcar", "Acúcar", "Acucar", "acucar"], 0) or 0)
+                proteina = float(g(["proteina", "Proteína", "Proteínas"], 0) or 0)
+                sodio_mg = float(g(["sodio_mg", "Sodio_mg", "sódio_mg", "Sódio_mg"], 0) or 0)
+
+                try:
+                    porcao = safe_parse_porçao(porc_val)
+                except Exception:
+                    porcao = 100.0
+
+                zero_ponto = str(g(["Zero Ponto", "ZeroPonto", "zeroponto"], "não")).strip().lower() == "sim"
+
+                alimento = {
+                    "Nome": str(nome),
+                    "Porcao": porcao,
+                    "Calorias": round(calorias, 2),
+                    "Gordura": round(gordura, 2),
+                    "Saturada": round(saturada, 2),
+                    "Carbo": round(carbo, 2),
+                    "Fibra": round(fibra, 2),
+                    "Açúcar": round(acucar, 2),
+                    "Proteina": round(proteina, 2),
+                    "Sodio_mg": round(sodio_mg, 2),
+                    "ZeroPontos": zero_ponto,
+                    "Pontos": 0  # inicial, será calculado
+                }
+
+                alimento["Pontos"] = calcular_pontos(alimento)
+                alimentos_novos.append(alimento)
+
+            if "alimentos" not in st.session_state:
+                st.session_state.alimentos = []
+
+            st.session_state.alimentos.extend(alimentos_novos)
+            persist_all()
+
+            st.success(f"📂 Importadas {len(alimentos_novos)} linhas. Total agora: {len(st.session_state.alimentos)} alimentos.")
+            try:
+                rerun_streamlit()
+            except Exception:
+                st.stop()
+
+        except Exception as e:
+            st.error(f"Erro ao importar planilha: {e}\n(Se for .xlsx, instale openpyxl: pip install openpyxl)")
 
 # -----------------------------
 # FUNÇÃO REGISTRAR CONSUMO (AJUSTADO)
@@ -800,55 +799,6 @@ load_alimentos()
 
 
 # -----------------------------
-# Função de cadastro
-# -----------------------------
-def cadastrar_alimento():
-    st.header("🍴 Cadastrar Alimento")
-    
-    nome = st.text_input("Nome do alimento")
-    porcao = st.number_input("Porção (g)", min_value=0.0, value=100.0)
-    calorias = st.number_input("Calorias", min_value=0.0, value=0.0)
-    gordura = st.number_input("Gordura (g)", min_value=0.0, value=0.0)
-    saturada = st.number_input("Gordura Saturada (g)", min_value=0.0, value=0.0)
-    carbo = st.number_input("Carboidratos (g)", min_value=0.0, value=0.0)
-    fibra = st.number_input("Fibra (g)", min_value=0.0, value=0.0)
-    acucar = st.number_input("Açúcar (g)", min_value=0.0, value=0.0)
-    proteina = st.number_input("Proteína (g)", min_value=0.0, value=0.0)
-    sodio_mg = st.number_input("Sódio (mg)", min_value=0.0, value=0.0)
-    
-    zero_pontos = st.checkbox("Este alimento tem 0 pontos?", key="cad_zero_points")
-    
-    if st.button("Cadastrar"):
-        pontos = calcular_pontos({
-            "Calorias": calorias,
-            "Gordura": gordura,
-            "Saturada": saturada,
-            "Carbo": carbo,
-            "Fibra": fibra,
-            "Açúcar": acucar,
-            "Proteina": proteina,
-            "ZeroPontos": zero_pontos
-        })
-        
-        alimento = {
-            "Nome": nome,
-            "Porcao": porcao,
-            "Calorias": round(calorias, 2),
-            "Gordura": round(gordura, 2),
-            "Saturada": round(saturada, 2),
-            "Carbo": round(carbo, 2),
-            "Fibra": round(fibra, 2),
-            "Açúcar": round(acucar, 2),
-            "Proteina": round(proteina, 2),
-            "Sodio_mg": round(sodio_mg, 2),
-            "Pontos": pontos,
-            "ZeroPontos": zero_pontos
-        }
-
-        # salvar ou adicionar à lista de alimentos
-        st.success(f"Alimento {nome} cadastrado com sucesso! Pontos: {pontos}")
-
-# -----------------------------
 # FUNÇÃO PARA CALCULAR PONTOS
 # -----------------------------
 def calcular_pontos(alimento):
@@ -896,7 +846,7 @@ def consultar_alimento():
         return
     alimento = st.session_state.alimentos[idx]
 
-    # ----- Exibição (mantendo design original) -----
+    # ----- Exibição -----
     st.subheader(alimento["Nome"])
     st.markdown(f"**Porção:** {alimento.get('Porcao', 0)} g")
     col1, col2, col3 = st.columns(3)
@@ -933,20 +883,20 @@ def consultar_alimento():
     st.markdown(f"**Zero Ponto:** {alimento.get('ZeroPontos', 'não')}")
     st.markdown("---")
 
-    # ----- Botões lado a lado (Editar / Excluir) -----
+    # ----- Botões Editar / Excluir -----
     col_edit, col_delete = st.columns([1, 1])
     with col_edit:
         if st.button("✏️ Editar este alimento", key=f"edit_btn_{idx}"):
             st.session_state[f"edit_open_{idx}"] = True
-            rerun_streamlit()  # ⚡ Atualiza a interface imediatamente
+            rerun_streamlit()
     with col_delete:
         if st.button("🗑️ Excluir este alimento", key=f"del_btn_{idx}"):
             st.session_state.alimentos.pop(idx)
             persist_all()
             st.success(f"Alimento '{escolha}' removido com sucesso!")
-            rerun_streamlit()  # ⚡ Atualiza a interface imediatamente
+            rerun_streamlit()
 
-    # ----- Painel de edição (abre só se a flag estiver True) -----
+    # ----- Painel de Edição -----
     flag_key = f"edit_open_{idx}"
     if st.session_state.get(flag_key, False):
         st.markdown("---")
@@ -980,15 +930,14 @@ def consultar_alimento():
             salvar = st.form_submit_button("💾 Salvar alterações")
             if salvar:
                 porcao_val = safe_parse_porçao(porcao_novo)
-
-                # Atualiza o alimento com os novos valores antes de recalcular pontos
+                # Atualiza alimento antes de recalcular pontos
                 alimento.update({
-                    "Nome": nome_novo,
+                    "Nome": nome_novo.strip(),
                     "Porcao": porcao_val,
                     "Calorias": round(calorias_novo, 2),
+                    "Carbo": round(carbo_novo, 2),
                     "Gordura": round(gordura_novo, 2),
                     "Saturada": round(saturada_novo, 2),
-                    "Carbo": round(carbo_novo, 2),
                     "Fibra": round(fibra_novo, 2),
                     "Açúcar": round(acucar_novo, 2),
                     "Proteina": round(proteina_novo, 2),
@@ -996,13 +945,12 @@ def consultar_alimento():
                     "ZeroPontos": zero_ponto_novo
                 })
 
-                # Recalcula os pontos usando a função oficial
+                # Recalcula pontos
                 alimento["Pontos"] = calcular_pontos(alimento)
-
                 persist_all()
                 st.session_state[flag_key] = False
                 st.success(f"Alimento '{nome_novo}' atualizado com sucesso! Pontos: {alimento['Pontos']}")
-                rerun_streamlit()  # ⚡ Atualização imediata
+                rerun_streamlit()
 
 # -----------------------------
 # DASHBOARD PRINCIPAL
