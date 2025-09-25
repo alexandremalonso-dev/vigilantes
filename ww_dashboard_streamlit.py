@@ -10,7 +10,6 @@ import sys
 from math import floor, ceil
 
 
-
 def rerun_streamlit():
     try:
         if hasattr(st, "experimental_rerun") and callable(st.experimental_rerun):
@@ -1406,18 +1405,46 @@ def blocos_tabelas_historico(consumo_historico, pontos_semana, peso_list, datas_
 # -----------------------------
 # BLOCO 4: Exportar PDF
 # -----------------------------
-def blocos_exportar_pdf(html_content, filename="historico_acumulado.pdf"):
+import streamlit as st
+import tempfile
+
+def blocos_exportar_pdf(html_content, filename="historico_acumulado.html"):
     st.markdown("### 📤 Exportar Report")
+    
+    # Cria arquivo temporário
     with tempfile.NamedTemporaryFile(delete=False, suffix=".html") as tmp:
         tmp.write(html_content.encode('utf-8'))
         tmp_path = tmp.name
     
-    if st.button("🖨️ Exportar PDF"):
-        try:
-            pdfkit.from_file(tmp_path, filename)
-            st.success(f"PDF gerado com sucesso: {filename}")
-        except Exception as e:
-            st.error(f"Erro ao gerar PDF: {e}")
+    # Botão para download do HTML
+    with open(tmp_path, "rb") as f:
+        st.download_button(
+            label="🖨️ Baixar Report (HTML)",
+            data=f,
+            file_name=filename,
+            mime="text/html"
+        )
+    
+    # Opção para tentar gerar PDF apenas se pdfkit + wkhtmltopdf estiver disponível
+    try:
+        import pdfkit
+        gerar_pdf = st.button("🖨️ Gerar PDF (wkhtmltopdf necessário)")
+        if gerar_pdf:
+            try:
+                pdf_filename = filename.replace(".html", ".pdf")
+                pdfkit.from_file(tmp_path, pdf_filename)
+                with open(pdf_filename, "rb") as pdf_file:
+                    st.download_button(
+                        label="📄 Baixar PDF",
+                        data=pdf_file,
+                        file_name=pdf_filename,
+                        mime="application/pdf"
+                    )
+            except Exception as e:
+                st.error(f"Erro ao gerar PDF: {e}")
+    except ModuleNotFoundError:
+        st.info("PDF não disponível: pdfkit/wkhtmltopdf não encontrado.")
+
 
 # -----------------------------
 # FUNÇÃO PRINCIPAL: Página Históricos Acumulados
