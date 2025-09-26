@@ -765,11 +765,24 @@ def calcular_meta_diaria(sexo, idade, peso, altura, objetivo, nivel_atividade):
 # -----------------------------
 # FUNÇÃO REGISTRAR PESO COMPLETA AJUSTADA
 # -----------------------------
+import datetime
+
+def parse_date(d):
+    """Converte string ou objeto para datetime.date."""
+    if isinstance(d, datetime.date):
+        return d
+    try:
+        return datetime.date.fromisoformat(str(d))
+    except Exception:
+        return None
+
 def registrar_peso():
     st.header("⚖️ Registrar Peso")
 
     if "mostrar_historico_peso" not in st.session_state:
         st.session_state.mostrar_historico_peso = False
+    if "historico_acumulado" not in st.session_state:
+        st.session_state.historico_acumulado = []
 
     # Formulário para registrar peso
     with st.form("form_peso"):
@@ -783,10 +796,6 @@ def registrar_peso():
         submitted = st.form_submit_button("Registrar peso")
 
         if submitted:
-            # Adiciona registro ao histórico acumulado
-            if "historico_acumulado" not in st.session_state:
-                st.session_state.historico_acumulado = []
-
             registro = {
                 "tipo": "peso",
                 "data": datetime.date.today(),
@@ -810,7 +819,7 @@ def registrar_peso():
             persist_all()
             st.success(f"Peso {peso_novo:.2f} kg registrado com sucesso! Meta diária: {st.session_state.meta_diaria} pts")
             st.session_state.mostrar_historico_peso = True
-            rerun_streamlit()  # força atualização dinâmica do histórico
+            rerun_streamlit()  # atualização imediata
 
     # Histórico de pesos
     with st.expander("Histórico de Pesos", expanded=st.session_state.mostrar_historico_peso):
@@ -818,9 +827,9 @@ def registrar_peso():
         if not historico_peso:
             st.info("Nenhum peso registrado ainda.")
         else:
-            for idx in range(len(historico_peso) - 1, -1, -1):
-                reg = historico_peso[idx]
-                data_reg = reg["data"]
+            historico_peso_sorted = sorted(historico_peso, key=lambda x: parse_date(x.get("data")), reverse=True)
+            for idx, reg in enumerate(historico_peso_sorted):
+                data_reg = parse_date(reg["data"])
                 peso_reg = reg["quantidade"]
                 cols = st.columns([6, 1, 1])
 
@@ -828,9 +837,9 @@ def registrar_peso():
                 if idx == 0:
                     tendencia = "➖"
                 else:
-                    if peso_reg < historico_peso[idx - 1]["quantidade"]:
+                    if peso_reg < historico_peso_sorted[idx - 1]["quantidade"]:
                         tendencia = "⬇️"
-                    elif peso_reg > historico_peso[idx - 1]["quantidade"]:
+                    elif peso_reg > historico_peso_sorted[idx - 1]["quantidade"]:
                         tendencia = "⬆️"
                     else:
                         tendencia = "➖"
@@ -851,7 +860,6 @@ def registrar_peso():
                         )
                         if st.button("Salvar alterações", key=save_key):
                             reg["quantidade"] = float(new_peso)
-
                             # Atualiza meta diária automaticamente
                             st.session_state.meta_diaria = calcular_meta_diaria(
                                 sexo=st.session_state.sexo,
@@ -861,7 +869,6 @@ def registrar_peso():
                                 objetivo=st.session_state.objetivo,
                                 nivel_atividade=st.session_state.nivel_atividade
                             )
-
                             persist_all()
                             st.success(f"Registro atualizado para {new_peso:.2f} kg. Meta diária: {st.session_state.meta_diaria} pts")
                             rerun_streamlit()
@@ -1164,7 +1171,7 @@ import plotly.graph_objects as go
 import numpy as np
 import pandas as pd
 
-if st.session_state.menu == "🏠 Dashboard":
+if st.session_state.menu == "dashboard":
     st.markdown("<h1 style='text-align: center; color: #2c3e50;'>🍏 Vigilantes do Peso Brasil</h1>", unsafe_allow_html=True)
 
     # Primeiro login ou perfil incompleto
@@ -1189,6 +1196,7 @@ if st.session_state.menu == "🏠 Dashboard":
         for r in st.session_state.historico_acumulado
         if r.get("tipo") == "consumo" and parse_date(r.get("data")) == hoje
     )
+    st.session_state.consumo_diario = consumo_diario
 
     # Garante que exista objeto da semana atual
     semana_obj = next((w for w in st.session_state.pontos_semana if w.get("semana") == semana_atual), None)
@@ -1198,12 +1206,14 @@ if st.session_state.menu == "🏠 Dashboard":
 
     extras_disponiveis = float(semana_obj.get("extras", 36.0))
 
+    # Painel principal de resumo
     st.markdown(
         f"<div style='background-color:#dff9fb;padding:15px;border-radius:10px;text-align:center;font-size:22px;'>"
         f"<b>Pontos consumidos hoje: {consumo_diario:.2f} / {st.session_state.meta_diaria} | "
         f"Extras disponíveis (semana): {extras_disponiveis:.2f} | Peso atual: {peso_atual:.2f} kg</b>"
         f"</div>", unsafe_allow_html=True
     )
+
 
     # -----------------------------
     # Gráficos principais
