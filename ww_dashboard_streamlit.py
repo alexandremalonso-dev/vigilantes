@@ -698,11 +698,9 @@ def registrar_consumo():
     pontos_por_porcao = round_points(alimento.get("Pontos", 0.0))
     st.markdown(f"**Porção referência:** {porcao_ref} g — Pontos (por porção): **{pontos_por_porcao}**")
 
-    # Inicializa flag para histórico expandido
-    if "mostrar_historico_consumo" not in st.session_state:
-        st.session_state.mostrar_historico_consumo = False
-    if "consumo_historico" not in st.session_state:
-        st.session_state.consumo_historico = []
+    # Inicializa flags e histórico
+    st.session_state.mostrar_historico_consumo = st.session_state.get("mostrar_historico_consumo", False)
+    st.session_state.consumo_historico = st.session_state.get("consumo_historico", [])
 
     # Formulário para registrar quantidade
     with st.form("form_reg_consumo", clear_on_submit=False):
@@ -727,9 +725,13 @@ def registrar_consumo():
                 "nome": escolha,
                 "quantidade": float(quantidade),
                 "pontos": pontos_registrados,
-                "usou_extras": 0.0
+                "usou_extras": 0.0,
+                "tipo": "consumo"  # ⚡ necessário para histórico
             }
+
+            # Adiciona ao histórico local e acumulado
             st.session_state.consumo_historico.append(registro)
+            add_to_historico(registro)
 
             rebuild_pontos_semana_from_history()
             persist_all()
@@ -738,10 +740,7 @@ def registrar_consumo():
                 f"Pontos: {pontos_registrados:.2f}. Total hoje: {st.session_state.consumo_diario:.2f}"
             )
 
-            # ativa flag para exibir histórico
             st.session_state.mostrar_historico_consumo = True
-
-            # ⚡ Força atualização imediata da interface
             try:
                 rerun_streamlit()
             except Exception:
@@ -783,18 +782,25 @@ def registrar_consumo():
                         if st.button("Salvar alterações", key=save_key):
                             reg["quantidade"] = float(new_q)
                             reg["pontos"] = new_p
+                            # Atualiza histórico acumulado
+                            add_to_historico({**reg, "tipo": "consumo"})
                             rebuild_pontos_semana_from_history()
                             persist_all()
                             st.success("Registro atualizado!")
-                            rerun_streamlit()  # atualização imediata
+                            rerun_streamlit()
 
                 # Excluir registro
                 if cols[2].button("Excluir", key=f"del_cons_{idx}"):
                     st.session_state.consumo_historico.pop(idx)
+                    # Remove também do histórico acumulado
+                    st.session_state.historico_acumulado = [
+                        r for r in st.session_state.historico_acumulado
+                        if not (r.get("tipo") == "consumo" and r.get("nome") == reg["nome"] and r.get("data") == reg["data"].isoformat())
+                    ]
                     rebuild_pontos_semana_from_history()
                     persist_all()
                     st.success("Registro excluído.")
-                    rerun_streamlit()  # atualização imediata
+                    rerun_streamlit()
 
 # -----------------------------
 # FUNÇÃO CALCULAR META DIÁRIA
