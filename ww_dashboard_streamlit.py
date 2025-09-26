@@ -1614,7 +1614,7 @@ def registrar_atividade_fisica():
 
 
 # -----------------------------
-# Função Históricos Acumulados (com ajustes)
+# Função Históricos Acumulados (ajustada)
 # -----------------------------
 import streamlit as st
 import datetime
@@ -1748,6 +1748,15 @@ def historico_acumulado_page():
 def exibir_relatorio(consumo_filtrado, atividades_filtrado, peso_filtrado, data_inicio, data_fim,
                      incluir_consumo=True, incluir_atividades=True):
     """Exibe na tela o relatório completo de consumo, atividades, peso e pontos extras"""
+
+    # Função local para normalizar datas
+    def parse_date(d):
+        if isinstance(d, datetime.date):
+            return d
+        try:
+            return datetime.date.fromisoformat(str(d))
+        except Exception:
+            return None
 
     # 🔹 Reconstruir atividades filtradas por período
     atividades_filtrado_local = []
