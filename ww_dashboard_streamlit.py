@@ -1416,7 +1416,7 @@ def exibir_historicos_dashboard():
 
     # Pontos Semanais Extras
     with col_hist1:
-        st.markdown("### 📊 Pontos Semanais Extras")
+        st.markdown("### 📊 Pontos Semanais")
         consumos = [
             r for r in historico
             if r["tipo"] == "consumo" and r.get("usou_extras", 0) > 0
