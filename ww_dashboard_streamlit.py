@@ -1385,7 +1385,7 @@ if st.session_state.menu == "🏠 Dashboard":
         st.plotly_chart(fig_gauge, use_container_width=True)
 
 # -----------------------------
-# Função para exibir históricos no dashboard
+# FUNÇÃO PARA EXIBIR HISTÓRICOS NO DASHBOARD
 # -----------------------------
 def exibir_historicos_dashboard():
     col_hist1, col_hist2, col_hist3 = st.columns(3)
@@ -1400,26 +1400,22 @@ def exibir_historicos_dashboard():
             return None
 
     # -----------------------------
-    # Pontos Semanais Extras
+    # Pontos Semanais / Histórico de Consumo
     # -----------------------------
     with col_hist1:
-        st.markdown("### 📊 Pontos Semanais")
+        st.markdown("### 📊 Pontos / Consumo Diário")
         
-        # Combina histórico acumulado e pontos semanais
-        consumos = []
+        # Pega todos os registros de consumo do histórico acumulado
+        consumos = [r for r in historico if r["tipo"] == "consumo"]
 
-        # Do histórico acumulado
-        consumos.extend([
-            r for r in historico
-            if r["tipo"] == "consumo" and r.get("usou_extras", 0) > 0
-        ])
-
-        # Dos pontos semanais (somente extras usados > 0)
+        # Inclui também registros da semana atual (pontos_semana) sem duplicar
         for semana in st.session_state.pontos_semana:
             for reg in semana.get("pontos", []):
-                if reg.get("usou_extras", 0) > 0:
-                    reg_copy = reg.copy()
-                    reg_copy["tipo"] = "consumo"  # garante compatibilidade
+                reg_copy = reg.copy()
+                reg_copy["tipo"] = "consumo"
+                if not any(
+                    r["data"] == reg_copy["data"] and r["nome"] == reg_copy["nome"] for r in consumos
+                ):
                     consumos.append(reg_copy)
 
         if consumos:
@@ -1429,8 +1425,9 @@ def exibir_historicos_dashboard():
                 dia_sem = weekday_name_br(dia) if dia else ""
                 st.markdown(
                     f"<div style='padding:10px; border:1px solid #f39c12; border-radius:5px; margin-bottom:5px;'>"
-                    f"{dia_str} ({dia_sem}): {reg['nome']} {reg.get('quantidade',0):.2f} g <span style='color:#1f3c88'>({reg.get('pontos',0):.2f} pts)</span>"
-                    f" - usou extras: ({reg.get('usou_extras',0):.2f} pts)"
+                    f"{dia_str} ({dia_sem}): {reg['nome']} {reg.get('quantidade',0):.2f} g "
+                    f"<span style='color:#1f3c88'>({reg.get('pontos',0):.2f} pts)</span>"
+                    f" — usou extras: ({reg.get('usou_extras',0):.2f} pts)"
                     f"</div>", unsafe_allow_html=True
                 )
         else:
@@ -1449,7 +1446,8 @@ def exibir_historicos_dashboard():
                 dia_sem = weekday_name_br(dia) if dia else ""
                 st.markdown(
                     f"<div style='padding:10px; border:1px solid #1abc9c; border-radius:5px; margin-bottom:5px;'>"
-                    f"{dia_str} ({dia_sem}): {reg['tipo_atividade']} - {reg.get('minutos',0):.2f} min <span style='color:#1f3c88'>({reg.get('pontos',0):.2f} pts)</span>"
+                    f"{dia_str} ({dia_sem}): {reg['tipo_atividade']} - {reg.get('minutos',0):.2f} min "
+                    f"<span style='color:#1f3c88'>({reg.get('pontos',0):.2f} pts)</span>"
                     f"</div>", unsafe_allow_html=True
                 )
         else:
