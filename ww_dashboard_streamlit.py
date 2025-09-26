@@ -1672,9 +1672,9 @@ def gerar_html_relatorio(consumo_filtrado, atividades_filtrado, peso_filtrado, p
 
     # Peso
     html += "<h2>Peso</h2><table><tr><th>Data</th><th>Peso (kg)</th></tr>"
-    for p,d in peso_filtrado:
-        d_data = parse_date(d)
-        html += f"<tr><td>{d_data.strftime('%d/%m/%Y')}</td><td>{p:.2f}</td></tr>"
+    for r in peso_filtrado:
+        d_data = parse_date(r["data"])
+        html += f"<tr><td>{d_data.strftime('%d/%m/%Y')}</td><td>{r['valor']:.2f}</td></tr>"
     html += "</table>"
 
     html += "</body></html>"
@@ -1723,7 +1723,7 @@ def historico_acumulado_page():
         atividades_filtrado = [r for r in historico if r["tipo"]=="atividade" and parse_date(r["data"]) and data_inicio <= parse_date(r["data"]) <= data_fim]
         peso_filtrado = [r for r in historico if r["tipo"]=="peso" and parse_date(r["data"]) and data_inicio <= parse_date(r["data"]) <= data_fim]
 
-        # ⚡ CHAMADA ESSENCIAL: exibir relatório imediatamente após clicar no botão
+        # ⚡ Chamada para exibir relatório na tela
         exibir_relatorio(
             consumo_filtrado,
             atividades_filtrado,
@@ -1739,6 +1739,7 @@ def historico_acumulado_page():
 # -----------------------------
 def exibir_relatorio(consumo_filtrado, atividades_filtrado, peso_filtrado, data_inicio, data_fim,
                      incluir_consumo=True, incluir_atividades=True):
+
     def parse_date(d):
         if isinstance(d, datetime.date):
             return d
@@ -1747,6 +1748,7 @@ def exibir_relatorio(consumo_filtrado, atividades_filtrado, peso_filtrado, data_
         except:
             return None
 
+    # Atividades filtradas locais
     atividades_filtrado_local = []
     if incluir_atividades:
         for semana in st.session_state.pontos_semana:
@@ -1761,6 +1763,7 @@ def exibir_relatorio(consumo_filtrado, atividades_filtrado, peso_filtrado, data_
                     a_display["data"] = data_atividade
                     atividades_filtrado_local.append(a_display)
 
+    # Consumo Diário
     if incluir_consumo and consumo_filtrado:
         st.markdown("### Consumo Diário")
         st.table([{
@@ -1771,6 +1774,7 @@ def exibir_relatorio(consumo_filtrado, atividades_filtrado, peso_filtrado, data_
             "Extras usados": r.get("usou_extras",0)
         } for r in consumo_filtrado])
 
+    # Atividades Físicas
     if incluir_atividades and atividades_filtrado_local:
         st.markdown("### Atividades Físicas")
         st.table([{
@@ -1780,6 +1784,7 @@ def exibir_relatorio(consumo_filtrado, atividades_filtrado, peso_filtrado, data_
             "Pontos": r.get("pontos",0)
         } for r in atividades_filtrado_local])
 
+    # Peso
     if peso_filtrado:
         st.markdown("### Peso")
         st.table([{
@@ -1787,6 +1792,7 @@ def exibir_relatorio(consumo_filtrado, atividades_filtrado, peso_filtrado, data_
             "Peso (kg)": r["valor"]
         } for r in peso_filtrado])
 
+    # Pontos Semanais Extras
     pontos_semanais = [r for r in consumo_filtrado if r.get("usou_extras",0) > 0]
     if pontos_semanais:
         st.markdown("### Pontos Semanais Extras")
@@ -1798,6 +1804,7 @@ def exibir_relatorio(consumo_filtrado, atividades_filtrado, peso_filtrado, data_
             "Extras usados": r.get("usou_extras",0)
         } for r in pontos_semanais])
 
+    # Botão para baixar HTML
     html_relatorio = gerar_html_relatorio(
         consumo_filtrado,
         atividades_filtrado_local,
