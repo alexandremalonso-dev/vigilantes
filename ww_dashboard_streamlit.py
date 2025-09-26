@@ -1726,6 +1726,14 @@ def historico_acumulado_page():
 # -----------------------------
 st.subheader("📊 Relatório")
 
+# Definir flags de inclusão para relatório
+incluir_consumo = st.session_state.get("incluir_consumo", True)  # ou False, conforme lógica
+incluir_atividades = st.session_state.get("incluir_atividades", True)
+
+def exibir_relatorio(consumo_filtrado, atividades_filtrado, peso_filtrado, data_inicio, data_fim,
+                     incluir_consumo=True, incluir_atividades=True):
+    # ... aqui já existem as variáveis
+
 # 🔹 Reconstruir atividades filtradas por período (substitui atividades_filtrado antigo)
 atividades_filtrado = []
 if incluir_atividades:
