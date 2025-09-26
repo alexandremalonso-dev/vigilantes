@@ -1632,6 +1632,9 @@ def gerar_html_relatorio(consumo_filtrado, atividades_filtrado, peso_filtrado, p
         except:
             return None
 
+    def format_num(n):
+        return "{:,.2f}".format(n).replace(".", ",")
+
     css = """
     <style>
         table {border-collapse: collapse; width: 100%;}
@@ -1643,7 +1646,7 @@ def gerar_html_relatorio(consumo_filtrado, atividades_filtrado, peso_filtrado, p
     """
     html = f"<html><head>{css}</head><body>"
     html += f"<h1>Histórico Acumulado - Vigilantes do Peso</h1>"
-    html += f"<p>Período: {data_inicio} → {data_fim}</p>"
+    html += f"<p>Período: {data_inicio.strftime('%d/%m/%Y')} → {data_fim.strftime('%d/%m/%Y')}</p>"
 
     # Pontos Semanais
     html += "<h2>Pontos Semanais</h2><table><tr><th>Semana</th><th>Data</th><th>Nome</th><th>Quantidade</th><th>Pontos</th><th>Extras usados</th></tr>"
@@ -1651,7 +1654,7 @@ def gerar_html_relatorio(consumo_filtrado, atividades_filtrado, peso_filtrado, p
         for r in w.get("pontos", []):
             r_data = parse_date(r["data"])
             if r_data and data_inicio <= r_data <= data_fim:
-                html += f"<tr><td>{w['semana']}</td><td>{r_data.strftime('%d/%m/%Y')}</td><td>{r['nome']}</td><td>{r.get('quantidade',0)}</td><td>{r.get('pontos',0)}</td><td>{r.get('usou_extras',0)}</td></tr>"
+                html += f"<tr><td>{w['semana']}</td><td>{r_data.strftime('%d/%m/%Y')}</td><td>{r['nome']}</td><td>{format_num(r.get('quantidade',0))}</td><td>{format_num(r.get('pontos',0))}</td><td>{format_num(r.get('usou_extras',0))}</td></tr>"
     html += "</table>"
 
     # Consumo Diário
@@ -1659,7 +1662,7 @@ def gerar_html_relatorio(consumo_filtrado, atividades_filtrado, peso_filtrado, p
         html += "<h2>Consumo Diário</h2><table><tr><th>Data</th><th>Alimento</th><th>Quantidade (g)</th><th>Pontos</th><th>Extras usados</th></tr>"
         for r in consumo_filtrado:
             r_data = parse_date(r["data"])
-            html += f"<tr><td>{r_data.strftime('%d/%m/%Y')}</td><td>{r['nome']}</td><td>{r['quantidade']}</td><td>{r['pontos']}</td><td>{r.get('usou_extras',0)}</td></tr>"
+            html += f"<tr><td>{r_data.strftime('%d/%m/%Y')}</td><td>{r['nome']}</td><td>{format_num(r['quantidade'])}</td><td>{format_num(r['pontos'])}</td><td>{format_num(r.get('usou_extras',0))}</td></tr>"
         html += "</table>"
 
     # Atividades Físicas
@@ -1667,14 +1670,14 @@ def gerar_html_relatorio(consumo_filtrado, atividades_filtrado, peso_filtrado, p
         html += "<h2>Atividades Físicas</h2><table><tr><th>Data</th><th>Tipo de Atividade</th><th>Duração (min)</th><th>Pontos</th></tr>"
         for reg in sorted(atividades_filtrado, key=lambda x: parse_date(x["data"])):
             d_data = parse_date(reg["data"])
-            html += f"<tr><td>{d_data.strftime('%d/%m/%Y')}</td><td>{reg.get('tipo_atividade', reg.get('tipo','—'))}</td><td>{reg.get('minutos',0)}</td><td>{reg.get('pontos',0)}</td></tr>"
+            html += f"<tr><td>{d_data.strftime('%d/%m/%Y')}</td><td>{reg.get('tipo_atividade', reg.get('tipo','—'))}</td><td>{format_num(reg.get('minutos',0))}</td><td>{format_num(reg.get('pontos',0))}</td></tr>"
         html += "</table>"
 
     # Peso
     html += "<h2>Peso</h2><table><tr><th>Data</th><th>Peso (kg)</th></tr>"
     for r in peso_filtrado:
         d_data = parse_date(r["data"])
-        html += f"<tr><td>{d_data.strftime('%d/%m/%Y')}</td><td>{r['valor']:.2f}</td></tr>"
+        html += f"<tr><td>{d_data.strftime('%d/%m/%Y')}</td><td>{format_num(r['valor'])}</td></tr>"
     html += "</table>"
 
     html += "</body></html>"
@@ -1698,15 +1701,15 @@ def botao_download_html(html_content):
 def historico_acumulado_page():
     st.header("📅 Seleção de Período para Histórico Acumulado")
 
-    # Garantir que a lista existe
+    # Inicializar sessão caso não exista
     if "pontos_semana" not in st.session_state:
         st.session_state.pontos_semana = []
 
     col1, col2, col3 = st.columns([2,2,1])
     with col1:
-        data_inicio = st.date_input("Data Início", value=datetime.date.today() - datetime.timedelta(days=30))
+        data_inicio = st.date_input("Data Início", value=datetime.date.today() - datetime.timedelta(days=30), format="DD/MM/YYYY")
     with col2:
-        data_fim = st.date_input("Data Fim", value=datetime.date.today())
+        data_fim = st.date_input("Data Fim", value=datetime.date.today(), format="DD/MM/YYYY")
     with col3:
         gerar = st.button("📄 Aplicar Filtro")
 
@@ -1752,7 +1755,10 @@ def exibir_relatorio(consumo_filtrado, historico_acumulado, peso_filtrado, data_
         except:
             return None
 
-    # Atividades: usar o histórico acumulado filtrado por data
+    def format_num(n):
+        return "{:,.2f}".format(n).replace(".", ",")
+
+    # Atividades filtradas do histórico
     atividades_filtrado_local = []
     if incluir_atividades:
         for r in historico_acumulado:
@@ -1771,9 +1777,9 @@ def exibir_relatorio(consumo_filtrado, historico_acumulado, peso_filtrado, data_
         st.table([{
             "Data": parse_date(r["data"]).strftime("%d/%m/%Y"),
             "Alimento": r["nome"],
-            "Quantidade (g)": r["quantidade"],
-            "Pontos": r["pontos"],
-            "Extras usados": r.get("usou_extras",0)
+            "Quantidade (g)": format_num(r["quantidade"]),
+            "Pontos": format_num(r["pontos"]),
+            "Extras usados": format_num(r.get("usou_extras",0))
         } for r in consumo_filtrado])
 
     # -----------------------------
@@ -1783,8 +1789,8 @@ def exibir_relatorio(consumo_filtrado, historico_acumulado, peso_filtrado, data_
         st.table([{
             "Data": r["data"].strftime("%d/%m/%Y"),
             "Atividade": r["tipo_atividade"],
-            "Minutos": r.get("minutos",0),
-            "Pontos": r.get("pontos",0)
+            "Minutos": format_num(r.get("minutos",0)),
+            "Pontos": format_num(r.get("pontos",0))
         } for r in atividades_filtrado_local])
 
     # -----------------------------
@@ -1793,7 +1799,7 @@ def exibir_relatorio(consumo_filtrado, historico_acumulado, peso_filtrado, data_
         st.markdown("### Peso")
         st.table([{
             "Data": parse_date(r["data"]).strftime("%d/%m/%Y"),
-            "Peso (kg)": r["valor"]
+            "Peso (kg)": format_num(r["valor"])
         } for r in peso_filtrado])
 
     # -----------------------------
@@ -1811,9 +1817,9 @@ def exibir_relatorio(consumo_filtrado, historico_acumulado, peso_filtrado, data_
         st.table([{
             "Data": parse_date(r["data"]).strftime("%d/%m/%Y"),
             "Nome": r["nome"],
-            "Quantidade": r.get("quantidade",0),
-            "Pontos": r.get("pontos",0),
-            "Extras usados": r.get("usou_extras",0)
+            "Quantidade": format_num(r.get("quantidade",0)),
+            "Pontos": format_num(r.get("pontos",0)),
+            "Extras usados": format_num(r.get("usou_extras",0))
         } for r in pontos_semanais])
 
     # -----------------------------
