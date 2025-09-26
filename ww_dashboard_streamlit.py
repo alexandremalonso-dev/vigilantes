@@ -709,6 +709,8 @@ def registrar_peso():
         st.session_state.mostrar_historico_peso = False
     if "historico_acumulado" not in st.session_state:
         st.session_state.historico_acumulado = []
+    if "peso" not in st.session_state:
+        st.session_state.peso = []
 
     # Formulário para registrar peso
     with st.form("form_peso"):
@@ -731,6 +733,11 @@ def registrar_peso():
                 "usou_extras": 0.0
             }
             st.session_state.historico_acumulado.append(registro)
+
+            # 🔹 Mantém lista simplificada de pesos para gráficos
+            st.session_state.peso = [
+                r["quantidade"] for r in st.session_state.historico_acumulado if r.get("tipo") == "peso"
+            ]
 
             # Atualiza meta diária automaticamente
             st.session_state.meta_diaria = calcular_meta_diaria(
@@ -787,6 +794,12 @@ def registrar_peso():
                         )
                         if st.button("Salvar alterações", key=save_key):
                             reg["quantidade"] = float(new_peso)
+
+                            # 🔹 Atualiza lista simplificada de pesos
+                            st.session_state.peso = [
+                                r["quantidade"] for r in st.session_state.historico_acumulado if r.get("tipo") == "peso"
+                            ]
+
                             # Atualiza meta diária automaticamente
                             st.session_state.meta_diaria = calcular_meta_diaria(
                                 sexo=st.session_state.sexo,
@@ -803,6 +816,12 @@ def registrar_peso():
                 # Excluir peso
                 if cols[2].button("❌", key=f"del_peso_{idx}"):
                     st.session_state.historico_acumulado.remove(reg)
+
+                    # 🔹 Atualiza lista simplificada de pesos
+                    st.session_state.peso = [
+                        r["quantidade"] for r in st.session_state.historico_acumulado if r.get("tipo") == "peso"
+                    ]
+
                     persist_all()
                     st.success("Registro excluído.")
                     rerun_streamlit()
@@ -1122,7 +1141,6 @@ import plotly.graph_objects as go
 import numpy as np
 import pandas as pd
 
-# Apenas executa o dashboard quando a rota/menu for 'dashboard'
 if st.session_state.menu == "dashboard":
 
     st.markdown("<h1 style='text-align: center; color: #2c3e50;'>🍏 Vigilantes do Peso Brasil</h1>", unsafe_allow_html=True)
@@ -1155,14 +1173,11 @@ if st.session_state.menu == "dashboard":
             return datetime.date.fromisoformat(str(d))
         except Exception:
             try:
-                # tenta alguns formatos comuns (fallback)
                 return datetime.datetime.strptime(str(d), "%Y-%m-%d").date()
             except Exception:
                 return None
 
     # ---------- Verifica perfil incompleto de forma segura ----------
-    # Certifique-se que sua função perfil_incompleto() esteja compatível; caso queira
-    # usar a checagem inline:
     def perfil_incompleto_safe():
         return (
             not st.session_state.get("peso", [0.0])
@@ -1174,15 +1189,12 @@ if st.session_state.menu == "dashboard":
             or not st.session_state.get("nivel_atividade", "sedentário")
         )
 
-    # Use a função existente se preferir; fallback para a safe
     try:
         incomplete = perfil_incompleto()
     except Exception:
         incomplete = perfil_incompleto_safe()
 
-    # ---------- Se perfil incompleto, chama completar_perfil() (que deve estar ajustada) ----------
     if st.session_state.get("primeiro_login", False) or incomplete:
-        # completar_perfil() não deve usar add_to_historico() — veja versão ajustada
         try:
             completar_perfil()
         except Exception as e:
@@ -1197,11 +1209,11 @@ if st.session_state.menu == "dashboard":
     hoje = datetime.date.today()
     semana_atual = iso_week_number(hoje)
 
-    # ---------- Peso atual (a partir do historico_acumulado) ----------
+    # ---------- Peso atual ----------
     historico_peso = [r for r in st.session_state.historico_acumulado if r.get("tipo") == "peso"]
     peso_atual = historico_peso[-1]["quantidade"] if historico_peso else 0.0
 
-    # ---------- Consumo diário (a partir do historico_acumulado) ----------
+    # ---------- Consumo diário ----------
     consumo_diario = sum(
         r.get("pontos", 0.0)
         for r in st.session_state.historico_acumulado
@@ -1209,7 +1221,7 @@ if st.session_state.menu == "dashboard":
     )
     st.session_state.consumo_diario = consumo_diario
 
-    # ---------- Garante objeto da semana atual ----------
+    # ---------- Semana atual ----------
     semana_obj = next((w for w in st.session_state.pontos_semana if w.get("semana") == semana_atual), None)
     if semana_obj is None:
         semana_obj = {"semana": semana_atual, "pontos": [], "extras": float(st.session_state.extras)}
@@ -1225,103 +1237,95 @@ if st.session_state.menu == "dashboard":
         f"</div>", unsafe_allow_html=True
     )
 
-# -----------------------------
-# Gráficos principais
-# -----------------------------
-col1, col2, col3 = st.columns(3, gap="large")
-graf_height = 430
+    # -----------------------------
+    # Gráficos principais
+    # -----------------------------
+    col1, col2, col3 = st.columns(3, gap="large")
+    graf_height = 430
 
-# Consumo Diário
-with col1:
-    meta_diaria = st.session_state.meta_diaria or 1
-    consumo_diario_val = float(st.session_state.consumo_diario or 0.0)
-    fig1 = go.Figure(go.Indicator(
-        mode="gauge+number",
-        value=consumo_diario_val,
-        number={'suffix': f" / {meta_diaria}"},
-        gauge={'axis': {'range': [0, max(meta_diaria, 1)]},
-               'bar': {'color': "#e74c3c"},
-               'steps': [
-                   {'range': [0, meta_diaria * 0.7], 'color': "#2ecc71"},
-                   {'range': [meta_diaria * 0.7, meta_diaria], 'color': "#f1c40f"}
-               ]},
-        title={'text': "Pontos Consumidos"}
-    ))
-    fig1.update_layout(height=graf_height)
-    st.plotly_chart(fig1, use_container_width=True)
+    # Consumo Diário
+    with col1:
+        meta_diaria = st.session_state.meta_diaria or 1
+        consumo_diario_val = float(st.session_state.consumo_diario or 0.0)
+        fig1 = go.Figure(go.Indicator(
+            mode="gauge+number",
+            value=consumo_diario_val,
+            number={'suffix': f" / {meta_diaria}"},
+            gauge={'axis': {'range': [0, max(meta_diaria, 1)]},
+                   'bar': {'color': "#e74c3c"},
+                   'steps': [
+                       {'range': [0, meta_diaria * 0.7], 'color': "#2ecc71"},
+                       {'range': [meta_diaria * 0.7, meta_diaria], 'color': "#f1c40f"}
+                   ]},
+            title={'text': "Pontos Consumidos"}
+        ))
+        fig1.update_layout(height=graf_height)
+        st.plotly_chart(fig1, use_container_width=True)
 
-# Pontos Extras
-with col2:
-    # soma pontos de activities filtrando por semana atual (tratando keys str/date)
-    pontos_atividade_semana = 0.0
-    for k, lst in st.session_state.get("activities", {}).items():
-        d = parse_date(k)
-        if d and iso_week_number(d) == semana_atual:
-            for a in lst:
-                pontos_atividade_semana += float(a.get("pontos", 0.0))
+    # Pontos Extras
+    with col2:
+        pontos_atividade_semana = 0.0
+        for k, lst in st.session_state.get("activities", {}).items():
+            d = parse_date(k)
+            if d and iso_week_number(d) == semana_atual:
+                for a in lst:
+                    pontos_atividade_semana += float(a.get("pontos", 0.0))
 
-    extras_disponiveis = float(semana_obj.get("extras", 36.0))
-    total_banco = max(0.0, extras_disponiveis + pontos_atividade_semana)
-    excesso_diario = max(0.0, st.session_state.consumo_diario - float(st.session_state.meta_diaria or 0))
+        extras_disponiveis = float(semana_obj.get("extras", 36.0))
+        total_banco = max(0.0, extras_disponiveis + pontos_atividade_semana)
+        excesso_diario = max(0.0, st.session_state.consumo_diario - float(st.session_state.meta_diaria or 0))
+        max_range = total_banco if total_banco > 0 else 1.0
 
-    # evita div/zero no gauge quando total_banco == 0
-    max_range = total_banco if total_banco > 0 else 1.0
+        fig2 = go.Figure(go.Indicator(
+            mode="gauge+number",
+            value=excesso_diario,
+            number={'suffix': f" / {total_banco:.0f}"},
+            gauge={'axis': {'range': [0, max_range]},
+                   'bar': {'color': "#006400"},
+                   'steps': [
+                       {'range': [0, max_range/3], 'color': "#e74c3c"},
+                       {'range': [max_range/3, 2*max_range/3], 'color': "#f1c40f"},
+                       {'range': [2*max_range/3, max_range], 'color': "#2ecc71"}
+                   ]},
+            title={'text': "⭐ Pontos Extras (semana)"}
+        ))
+        fig2.update_layout(height=graf_height)
+        st.plotly_chart(fig2, use_container_width=True)
 
-    fig2 = go.Figure(go.Indicator(
-        mode="gauge+number",
-        value=excesso_diario,
-        number={'suffix': f" / {total_banco:.0f}"},
-        gauge={'axis': {'range': [0, max_range]},
-               'bar': {'color': "#006400"},
-               'steps': [
-                   {'range': [0, max_range/3], 'color': "#e74c3c"},
-                   {'range': [max_range/3, 2*max_range/3], 'color': "#f1c40f"},
-                   {'range': [2*max_range/3, max_range], 'color': "#2ecc71"}
-               ]},
-        title={'text': "⭐ Pontos Extras (semana)"}
-    ))
-    fig2.update_layout(height=graf_height)
-    st.plotly_chart(fig2, use_container_width=True)
-
-# Peso Atual
-with col3:
-    pesolist = st.session_state.get("peso", [])
-
-    if not pesolist:  # se vazio, inicializa
-        pesolist = [0.0]
-
-    if len(pesolist) <= 1:
-        cor_gauge = "blue"
-        tendencia = "➖"
-    else:
-        if pesolist[-1] < pesolist[-2]:
-            cor_gauge = "green"
-            tendencia = "⬇️"
-        elif pesolist[-1] > pesolist[-2]:
-            cor_gauge = "orange"
-            tendencia = "⬆️"
-        else:
+    # Peso Atual
+    with col3:
+        pesolist = st.session_state.get("peso", [0.0])
+        if len(pesolist) <= 1:
             cor_gauge = "blue"
             tendencia = "➖"
+        else:
+            if pesolist[-1] < pesolist[-2]:
+                cor_gauge = "green"
+                tendencia = "⬇️"
+            elif pesolist[-1] > pesolist[-2]:
+                cor_gauge = "orange"
+                tendencia = "⬆️"
+            else:
+                cor_gauge = "blue"
+                tendencia = "➖"
 
-    peso_atual = pesolist[-1]
-    min_axis = min(pesolist) - 5
-    max_axis = max(pesolist) + 5
+        peso_atual = pesolist[-1]
+        min_axis = min(pesolist) - 5
+        max_axis = max(pesolist) + 5
 
-    fig_gauge = go.Figure(go.Indicator(
-        mode="gauge+number",
-        value=peso_atual,
-        number={'suffix': " kg"},
-        gauge={'axis': {'range': [min_axis, max_axis]},
-               'bar': {'color': cor_gauge}},
-        title={'text': f"Peso Atual {tendencia}"}
-    ))
-    fig_gauge.update_layout(height=graf_height)
-    st.plotly_chart(fig_gauge, use_container_width=True)
-
+        fig_gauge = go.Figure(go.Indicator(
+            mode="gauge+number",
+            value=peso_atual,
+            number={'suffix': " kg"},
+            gauge={'axis': {'range': [min_axis, max_axis]},
+                   'bar': {'color': cor_gauge}},
+            title={'text': f"Peso Atual {tendencia}"}
+        ))
+        fig_gauge.update_layout(height=graf_height)
+        st.plotly_chart(fig_gauge, use_container_width=True)
 
     # -----------------------------
-    # FUNÇÃO PARA EXIBIR HISTÓRICOS NO DASHBOARD (AJUSTADA)
+    # Função para exibir históricos (mantendo layout original)
     # -----------------------------
     def exibir_historicos_dashboard():
         col_hist1, col_hist2, col_hist3 = st.columns(3)
@@ -1349,10 +1353,13 @@ with col3:
                     dia = parse_date(reg["data"])
                     dia_str = dia.strftime("%d/%m/%Y") if dia else str(reg["data"])
                     dia_sem = weekday_name_br(dia) if dia else ""
+                    # Arredonda e troca ponto por vírgula
+                    quantidade_fmt = f"{reg.get('quantidade',0):.2f}".replace(".",",")
+                    pontos_fmt = f"{reg.get('pontos',0):.2f}".replace(".",",")
                     st.markdown(
                         f"<div style='padding:10px; border:1px solid #f39c12; border-radius:5px; margin-bottom:5px;'>"
-                        f"{dia_str} ({dia_sem}): {reg['nome']} {reg.get('quantidade',0):.2f} g "
-                        f"<span style='color:#1f3c88'>({reg.get('pontos',0):.2f} pts)</span>"
+                        f"{dia_str} ({dia_sem}): {reg['nome']} {quantidade_fmt} g "
+                        f"<span style='color:#1f3c88'>({pontos_fmt} pts)</span>"
                         f"</div>", unsafe_allow_html=True
                     )
             else:
