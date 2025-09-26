@@ -1346,7 +1346,17 @@ if st.session_state.menu == "🏠 Dashboard":
         st.plotly_chart(fig_gauge, use_container_width=True)
 
 # -----------------------------
-# FUNÇÃO PARA EXIBIR HISTÓRICOS NO DASHBOARD (AJUSTADA)
+# FUNÇÃO AUXILIAR: MESMA SEMANA
+# -----------------------------
+def mesma_semana(data: datetime.date):
+    """Retorna True se a data passada pertence à mesma semana do dia de hoje"""
+    if not data:
+        return False
+    hoje = datetime.date.today()
+    return iso_week_number(data) == iso_week_number(hoje) and data.year == hoje.year
+
+# -----------------------------
+# FUNÇÃO PARA EXIBIR HISTÓRICOS NO DASHBOARD
 # -----------------------------
 def exibir_historicos_dashboard():
     col_hist1, col_hist2, col_hist3 = st.columns(3)
