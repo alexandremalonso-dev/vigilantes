@@ -382,16 +382,17 @@ def rebuild_pontos_semana_from_history():
 st.sidebar.title("📋 Menu")
 
 menu_itens = [
-    ("🏠 Dashboard", "🏠 Dashboard"),
-    ("🍴 Registrar Consumo", "🍴 Registrar consumo"),
-    ("⚖️ Registrar Peso", "⚖️ Registrar peso"),
-    ("📂 Importar Alimentos", "📂 Importar planilha de alimentos"),
-    ("➕ Cadastrar Alimento", "➕ Cadastrar novo alimento"),
-    ("🔍 Consultar Alimento", "🔍 Consultar alimento"),
-    ("🏃 Atividades Físicas", "🏃 Atividades Físicas"),
-    ("📊 Históricos Acumulados", "📊 Históricos Acumulados"),
+    ("🏠 Dashboard", "dashboard"),
+    ("🍴 Registrar Consumo", "registrar_consumo"),
+    ("⚖️ Registrar Peso", "registrar_peso"),
+    ("📂 Importar Alimentos", "importar_alimentos"),
+    ("➕ Cadastrar Alimento", "cadastrar_alimento"),
+    ("🔍 Consultar Alimento", "consultar_alimento"),
+    ("🏃 Atividades Físicas", "atividades"),
+    ("📋 Perfil", "perfil"),
+    ("📊 Históricos Acumulados", "historicos"),
     ("🔄 Resetar Semana", "resetar_semana"),
-    ("🚪 Sair", "🚪 Sair"),
+    ("🚪 Sair", "sair"),
 ]
 
 for label, key in menu_itens:
@@ -403,40 +404,47 @@ for label, key in menu_itens:
         # -----------------------------
         if key == "resetar_semana":
             hoje = datetime.date.today()
-            semana_atual = iso_week_number(hoje)
+            semana_atual = hoje.isocalendar()[1]
 
-            # Remove apenas registros de consumo do histórico da semana atual
-            st.session_state.historico_acumulado = [
-                r for r in st.session_state.historico_acumulado
-                if not (r.get("tipo") == "consumo" and iso_week_number(r.get("data")) == semana_atual)
-            ]
+            # Remove apenas registros da semana atual
+            st.session_state.pontos_semana = [
+                w for w in st.session_state.pontos_semana if w.get("semana") != semana_atual
+            ] if "pontos_semana" in st.session_state else []
 
-            # Reset extras e recalcula pontos da semana atual
+            st.session_state.pontos_semana.append({
+                "semana": semana_atual,
+                "pontos": [],
+                "extras": 36.0
+            })
+
             st.session_state.extras = 36.0
-            rebuild_pontos_semana_from_history()  # recalcula dinamicamente o consumo diário e extras
+            st.session_state.consumo_diario = 0.0
 
+            if "consumo_historico" in st.session_state:
+                st.session_state.consumo_historico = [
+                    r for r in st.session_state.consumo_historico
+                    if r.get("data").isocalendar()[1] != semana_atual
+                ]
+
+            persist_all()
             st.sidebar.success(f"✅ Semana {semana_atual} resetada com sucesso!")
 
         # -----------------------------
         # AÇÃO SAIR (logout)
         # -----------------------------
-        elif key == "🚪 Sair":
+        elif key == "sair":
             st.session_state.logged_in = False
 
-            # Remove apenas dados voláteis da sessão, preservando histórico acumulado e alimentos globais
-            private_keys = [
-                "peso", "datas_peso", "consumo_diario",
-                "extras", "activities"
-            ]
-            for k in private_keys:
+            # Limpa dados voláteis do usuário, mas mantém histórico no JSON
+            for k in ["peso", "datas_peso", "consumo_historico", "pontos_semana", "consumo_diario", "extras", "activities"]:
                 if k in st.session_state:
                     del st.session_state[k]
 
-            # Força recarregamento seguro
+            # Mantém alimentos globais intactos
             try:
                 st.experimental_rerun()
             except Exception:
-                st.stop()  # fallback seguro
+                st.stop()
 
 
 # -----------------------------
@@ -863,10 +871,12 @@ def registrar_peso():
                     rerun_streamlit()
 
 # -----------------------------
-# Relatório de variáveis do perfil (apenas no Dashboard)
+# Função Página Perfil
 # -----------------------------
-if st.session_state.menu == "🏠 Dashboard":
-    st.subheader("📋 Relatório do Perfil")
+def perfil_page():
+    st.header("📋 Perfil do Usuário")
+    
+    st.subheader("Informações Atuais")
     st.write(f"**Sexo:** {st.session_state.sexo}")
     st.write(f"**Idade:** {st.session_state.idade} anos")
     st.write(f"**Altura:** {st.session_state.altura:.2f} m")
@@ -874,11 +884,9 @@ if st.session_state.menu == "🏠 Dashboard":
     st.write(f"**Nível de atividade:** {st.session_state.nivel_atividade}")
     st.write(f"**Meta diária:** {st.session_state.meta_diaria} pontos")
 
-    # Botão para editar perfil diretamente
     with st.expander("✏️ Editar Perfil"):
         sexo = st.selectbox(
-            "Sexo", 
-            ["feminino", "masculino"], 
+            "Sexo", ["feminino", "masculino"],
             index=0 if st.session_state.sexo.lower() == "feminino" else 1
         )
         idade = st.number_input(
@@ -888,29 +896,26 @@ if st.session_state.menu == "🏠 Dashboard":
             "Altura (m):", min_value=1.0, max_value=2.5, step=0.01, value=st.session_state.altura
         )
         objetivo = st.selectbox(
-            "Objetivo", 
-            ["emagrecimento", "manutenção", "ganho"], 
+            "Objetivo", ["emagrecimento", "manutenção", "ganho"],
             index=["emagrecimento","manutenção","ganho"].index(st.session_state.objetivo)
         )
         nivel_atividade = st.selectbox(
-            "Nível de atividade", 
-            ["sedentário", "moderado", "intenso"], 
+            "Nível de atividade", ["sedentário", "moderado", "intenso"],
             index=["sedentário","moderado","intenso"].index(st.session_state.nivel_atividade)
         )
 
-        if st.button("Salvar Perfil", key="salvar_perfil_inline"):
+        if st.button("Salvar Perfil", key="salvar_perfil_page"):
             st.session_state.sexo = sexo
             st.session_state.idade = idade
             st.session_state.altura = altura
             st.session_state.objetivo = objetivo
             st.session_state.nivel_atividade = nivel_atividade
 
-            # Recalcula meta diária usando o último peso registrado no histórico acumulado
-            historico_peso = [r for r in st.session_state.historico_acumulado if r.get("tipo") == "peso"]
-            if historico_peso:
-                ultimo_peso = historico_peso[-1]["quantidade"]
+            # Recalcula meta diária com último peso
+            if st.session_state.peso:
+                ultimo_peso = st.session_state.peso[-1]
             else:
-                ultimo_peso = st.session_state.peso[-1] if st.session_state.peso else 70.0  # fallback seguro
+                ultimo_peso = 70.0  # fallback seguro
 
             st.session_state.meta_diaria = calcular_meta_diaria(
                 sexo=st.session_state.sexo,
@@ -1723,30 +1728,34 @@ def calcular_meta_diaria(peso, altura, idade, sexo, objetivo, nivel_atividade):
 # -----------------------------
 # ROTAS / PAGES
 # -----------------------------
-if st.session_state.menu == "🏠 Dashboard":
+if st.session_state.menu == "dashboard":
+    # Chamada do dashboard principal
     st.write("🏠 Dashboard principal")  # substitua pelo seu código real do dashboard
 
-elif st.session_state.menu == "📂 Importar planilha de alimentos":
+elif st.session_state.menu == "importar_alimentos":
     importar_planilha()
 
-elif st.session_state.menu == "➕ Cadastrar novo alimento":
+elif st.session_state.menu == "cadastrar_alimento":
     cadastrar_alimento()
 
-elif st.session_state.menu == "🍴 Registrar consumo":
+elif st.session_state.menu == "registrar_consumo":
     registrar_consumo()
 
-elif st.session_state.menu == "⚖️ Registrar peso":
+elif st.session_state.menu == "registrar_peso":
     registrar_peso()
 
-elif st.session_state.menu == "🔍 Consultar alimento":
+elif st.session_state.menu == "consultar_alimento":
     consultar_alimento()
 
-elif st.session_state.menu == "🏃 Atividades Físicas":
+elif st.session_state.menu == "atividades":
     registrar_atividade_fisica()
 
-elif st.session_state.menu == "📊 Históricos Acumulados":
-    historico_acumulado_page()  # nossa nova página de históricos
+elif st.session_state.menu == "perfil":
+    perfil_page()  # função exclusiva para exibir/editar perfil
 
-elif st.session_state.menu == "🚪 Sair":
+elif st.session_state.menu == "historicos":
+    historico_acumulado_page()  # página de históricos acumulados
+
+elif st.session_state.menu == "sair":
     # logout já tratado no menu lateral
     pass
