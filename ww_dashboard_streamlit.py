@@ -876,9 +876,15 @@ def registrar_peso():
 # -----------------------------
 # Função Página Perfil
 # -----------------------------
+import datetime
+
 def perfil_page():
     st.header("📋 Perfil do Usuário")
-    
+
+    # Garante histórico acumulado inicializado
+    if "historico_acumulado" not in st.session_state:
+        st.session_state.historico_acumulado = []
+
     st.subheader("Informações Atuais")
     st.write(f"**Sexo:** {st.session_state.sexo}")
     st.write(f"**Idade:** {st.session_state.idade} anos")
@@ -914,11 +920,20 @@ def perfil_page():
             st.session_state.objetivo = objetivo
             st.session_state.nivel_atividade = nivel_atividade
 
-            # Recalcula meta diária com último peso
-            if st.session_state.peso:
-                ultimo_peso = st.session_state.peso[-1]
-            else:
-                ultimo_peso = 70.0  # fallback seguro
+            # Verifica se há peso no histórico; se não, adiciona registro inicial 0
+            if not [r for r in st.session_state.historico_acumulado if r.get("tipo") == "peso"]:
+                st.session_state.historico_acumulado.append({
+                    "tipo": "peso",
+                    "data": datetime.date.today().isoformat(),
+                    "nome": "Peso inicial",
+                    "quantidade": 0.0,
+                    "pontos": 0,
+                    "usou_extras": 0.0
+                })
+
+            # Recalcula meta diária usando o último peso registrado
+            historico_peso = [r for r in st.session_state.historico_acumulado if r.get("tipo") == "peso"]
+            ultimo_peso = historico_peso[-1]["quantidade"] if historico_peso else 0.0
 
             st.session_state.meta_diaria = calcular_meta_diaria(
                 sexo=st.session_state.sexo,
