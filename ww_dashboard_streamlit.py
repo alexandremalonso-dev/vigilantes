@@ -726,7 +726,7 @@ def registrar_consumo():
                 "quantidade": float(quantidade),
                 "pontos": pontos_registrados,
                 "usou_extras": 0.0,
-                "tipo": "consumo"  # ⚡ necessário para histórico
+                "tipo": "consumo"  # ⚡ essencial para dashboard
             }
 
             # Adiciona ao histórico local e acumulado
@@ -1369,24 +1369,31 @@ def exibir_historicos_dashboard():
     historico = st.session_state.get("historico_acumulado", [])
 
     def parse_date(d):
+        """Converte string ISO ou datetime.date em datetime.date"""
         if isinstance(d, datetime.date):
             return d
-        try:
-            return datetime.date.fromisoformat(d)
-        except:
-            return None
+        if isinstance(d, str):
+            try:
+                return datetime.date.fromisoformat(d)
+            except:
+                return None
+        return None
+
+    hoje = datetime.date.today()
 
     # -----------------------------
-    # Pontos / Consumo Diário
+    # Pontos / Consumo Diário (apenas hoje)
     # -----------------------------
     with col_hist1:
         st.markdown("### 📊 Pontos / Consumo Diário")
-        pontos_reg = [r for r in historico if r.get("tipo") == "consumo" and mesma_semana(parse_date(r["data"]))]
+        pontos_reg = [
+            r for r in historico
+            if r.get("tipo") == "consumo" and parse_date(r.get("data")) == hoje
+        ]
         if pontos_reg:
             for reg in sorted(pontos_reg, key=lambda x: parse_date(x["data"])):
-                dia = parse_date(reg["data"])
-                dia_str = dia.strftime("%d/%m/%Y") if dia else str(reg["data"])
-                dia_sem = weekday_name_br(dia) if dia else ""
+                dia_str = hoje.strftime("%d/%m/%Y")
+                dia_sem = weekday_name_br(hoje)
                 usados_txt = f" - usou extras: ({reg.get('usou_extras',0.0):.2f} pts)" if reg.get("usou_extras",0.0) else ""
                 st.markdown(
                     f"<div style='padding:10px; border:1px solid #f39c12; border-radius:5px; margin-bottom:5px;'>"
@@ -1395,14 +1402,17 @@ def exibir_historicos_dashboard():
                     f"</div>", unsafe_allow_html=True
                 )
         else:
-            st.write(" - (sem registros)")
+            st.write(" - (sem registros hoje)")
 
     # -----------------------------
-    # Histórico de Atividades
+    # Histórico de Atividades (semana atual)
     # -----------------------------
     with col_hist2:
         st.markdown("### 🏃 Histórico de Atividades Físicas")
-        acts = [r for r in historico if r.get("tipo") == "atividade" and mesma_semana(parse_date(r["data"]))]
+        acts = [
+            r for r in historico
+            if r.get("tipo") == "atividade" and parse_date(r.get("data")) and mesma_semana(parse_date(r.get("data")))
+        ]
         if acts:
             for reg in sorted(acts, key=lambda x: parse_date(x["data"])):
                 dia = parse_date(reg["data"])
@@ -1418,11 +1428,14 @@ def exibir_historicos_dashboard():
             st.info("Nenhuma atividade registrada nesta semana.")
 
     # -----------------------------
-    # Histórico de Peso
+    # Histórico de Peso (semana atual)
     # -----------------------------
     with col_hist3:
         st.markdown("### ⚖️ Histórico de Peso")
-        pesos = [r for r in historico if r.get("tipo") == "peso" and mesma_semana(parse_date(r["data"]))]
+        pesos = [
+            r for r in historico
+            if r.get("tipo") == "peso" and parse_date(r.get("data")) and mesma_semana(parse_date(r.get("data")))
+        ]
         for i, reg in enumerate(pesos):
             dia = parse_date(reg["data"])
             tendencia = "➖"
