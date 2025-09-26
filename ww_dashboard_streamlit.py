@@ -79,25 +79,6 @@ def save_data(data, file_path):
         st.error(f"Erro ao salvar dados: {e}")
 
 
-
-def add_to_historico(entry: dict):
-    """Adiciona ou atualiza entrada no histórico acumulado sem duplicidade"""
-    # Normaliza data
-    if isinstance(entry.get("data"), datetime.date):
-        entry["data"] = entry["data"].isoformat()
-
-    # Evitar duplicidade (mesma data + tipo + nome)
-    for idx, old in enumerate(st.session_state.historico_acumulado):
-        if (old.get("data") == entry.get("data")
-            and old.get("tipo") == entry.get("tipo")
-            and old.get("nome") == entry.get("nome")):
-            st.session_state.historico_acumulado[idx] = entry
-            persist_all()
-            return
-
-    st.session_state.historico_acumulado.append(entry)
-    persist_all()
-
 def persist_all():
     # salva todos os dados do usuário atual
     global data_store, activities
@@ -695,33 +676,8 @@ def importar_planilha():
         except Exception as e:
             st.error(f"Erro ao importar planilha: {e}\n(Se for .xlsx, instale openpyxl: pip install openpyxl)")
 
-import datetime
-import streamlit as st
-# ... outros imports
-
-# 🔹 Inicializar histórico acumulado (novo log unificado)
-if "historico_acumulado" not in st.session_state:
-    st.session_state.historico_acumulado = []
-
 # -----------------------------
-# Função auxiliar para histórico
-# -----------------------------
-def add_to_historico(entry: dict):
-    if isinstance(entry.get("data"), datetime.date):
-        entry["data"] = entry["data"].isoformat()
-    for idx, old in enumerate(st.session_state.historico_acumulado):
-        if (old.get("data") == entry.get("data")
-            and old.get("tipo") == entry.get("tipo")
-            and old.get("nome") == entry.get("nome")):
-            st.session_state.historico_acumulado[idx] = entry
-            persist_all()
-            return
-    st.session_state.historico_acumulado.append(entry)
-    persist_all()
-
-
-# -----------------------------
-# Registrar Consumo
+# FUNÇÃO REGISTRAR CONSUMO (REVISADA COM EXTRAS)
 # -----------------------------
 def registrar_consumo():
     st.header("🍴 Registrar Consumo")
@@ -730,15 +686,7 @@ def registrar_consumo():
         st.warning("Nenhum alimento cadastrado ainda.")
         return
 
-    # Inicializa flags e listas
-    if "consumo_historico" not in st.session_state:
-        st.session_state.consumo_historico = []
-    if "pontos_semana" not in st.session_state:
-        st.session_state.pontos_semana = []
-    if "mostrar_historico_consumo" not in st.session_state:
-        st.session_state.mostrar_historico_consumo = False
-
-    # Seleção do alimento
+    # Seleção do alimento em ordem alfabética
     nomes = sorted([a["Nome"] for a in st.session_state.alimentos])
     escolha = st.selectbox("Escolha o alimento:", nomes, key="consumo_select")
     alimento = next((a for a in st.session_state.alimentos if a["Nome"] == escolha), None)
@@ -750,9 +698,15 @@ def registrar_consumo():
     pontos_por_porcao = round_points(alimento.get("Pontos", 0.0))
     st.markdown(f"**Porção referência:** {porcao_ref} g — Pontos (por porção): **{pontos_por_porcao}**")
 
-    # -----------------------------
+    # Inicializa flags e listas
+    if "mostrar_historico_consumo" not in st.session_state:
+        st.session_state.mostrar_historico_consumo = False
+    if "consumo_historico" not in st.session_state:
+        st.session_state.consumo_historico = []
+    if "pontos_semana" not in st.session_state:
+        st.session_state.pontos_semana = []
+
     # Formulário para registrar quantidade
-    # -----------------------------
     with st.form("form_reg_consumo", clear_on_submit=False):
         quantidade = st.number_input(
             f"Quantidade consumida em gramas (porção {porcao_ref} g):",
@@ -769,22 +723,75 @@ def registrar_consumo():
             )
 
             registro = {
-                "tipo": "alimento",
+                "tipo": "consumo",
                 "data": datetime.date.today(),
                 "nome": escolha,
                 "quantidade": float(quantidade),
                 "pontos": pontos_registrados,
-                "usou_extras": 0.0
+                "usou_extras": 0.0  # inicial
             }
             st.session_state.consumo_historico.append(registro)
 
-            # Atualiza pontos semanais
-            rebuild_pontos_semana_from_history()
-            add_to_historico(registro)
+            # Recalcula pontos semanais incluindo extras
+            rebuild_pontos_semana_from_history()  # aqui já deve atualizar o campo usou_extras
             persist_all()
-            st.success(f"🍴 Registrado {quantidade:.2f}g de {escolha}. Pontos: {pontos_registrados:.2f}")
+            st.success(
+                f"🍴 Registrado {quantidade:.2f}g de {escolha}. "
+                f"Pontos: {pontos_registrados:.2f}. Total hoje: {st.session_state.consumo_diario:.2f}"
+            )
+
             st.session_state.mostrar_historico_consumo = True
-            st.experimental_rerun()
+            try:
+                rerun_streamlit()
+            except Exception:
+                st.stop()
+
+    # Histórico com opções de editar/excluir
+    with st.expander("### Histórico de Consumo (últimos registros)", expanded=st.session_state.mostrar_historico_consumo):
+        if not st.session_state.consumo_historico:
+            st.info("Nenhum consumo registrado ainda.")
+        else:
+            for idx in range(len(st.session_state.consumo_historico) - 1, -1, -1):
+                reg = st.session_state.consumo_historico[idx]
+                data = reg["data"]
+                dia_sem = weekday_name_br(data) if isinstance(data, datetime.date) else ""
+                display = f"{data.strftime('%d/%m/%Y')} ({dia_sem}): {reg['nome']} — {reg['quantidade']:.2f} g — {reg['pontos']:.2f} pts"
+                if reg.get("usou_extras", 0.0):
+                    display += f" — usou extras: {reg.get('usou_extras',0.0):.2f} pts"
+
+                cols = st.columns([6, 1, 1])
+                cols[0].write(display)
+
+                # Editar registro
+                if cols[1].button("Editar", key=f"edit_cons_{idx}"):
+                    edit_key_q = f"edit_q_{idx}"
+                    save_key = f"save_cons_{idx}"
+                    with st.expander(f"Editar registro #{idx}", expanded=True):
+                        new_q = st.number_input(
+                            "Quantidade (g):", min_value=0.0, step=1.0,
+                            value=reg["quantidade"], key=edit_key_q
+                        )
+                        alimento_ref = next((a for a in st.session_state.alimentos if a["Nome"] == reg["nome"]), None)
+                        new_p = reg["pontos"]
+                        if alimento_ref:
+                            porc_ref = float(alimento_ref.get("Porcao", 100.0))
+                            new_p = round_points(float(alimento_ref.get("Pontos", 0.0)) * (new_q / porc_ref if porc_ref > 0 else 0.0))
+
+                        if st.button("Salvar alterações", key=save_key):
+                            reg["quantidade"] = float(new_q)
+                            reg["pontos"] = new_p
+                            rebuild_pontos_semana_from_history()  # atualiza extras
+                            persist_all()
+                            st.success("Registro atualizado!")
+                            rerun_streamlit()
+
+                # Excluir registro
+                if cols[2].button("Excluir", key=f"del_cons_{idx}"):
+                    st.session_state.consumo_historico.pop(idx)
+                    rebuild_pontos_semana_from_history()  # atualiza extras
+                    persist_all()
+                    st.success("Registro excluído.")
+                    rerun_streamlit()
 
 # -----------------------------
 # FUNÇÃO CALCULAR META DIÁRIA
@@ -934,55 +941,31 @@ def registrar_peso():
                 # Editar peso
                 if cols[1].button("Editar", key=f"edit_peso_{idx}"):
                     edit_key = f"edit_peso_input_{idx}"
-                    save_key = f"save_edit_peso_{idx}"
-                    nova_data = dia
-                    novo_valor = peso_reg
-
+                    save_key = f"save_peso_{idx}"
                     with st.expander(f"Editar registro #{idx}", expanded=True):
-                        novo_valor = st.number_input(
+                        new_peso = st.number_input(
                             "Novo peso (kg):",
                             min_value=0.0,
                             step=0.1,
                             value=peso_reg,
                             key=edit_key
                         )
-                        nova_data = st.date_input(
-                            "Data do registro:",
-                            value=dia if dia else datetime.date.today(),
-                            key=f"edit_peso_data_{idx}"
-                        )
-
-                        # -----------------------------
-                        # Registrar Peso
-                        # -----------------------------
                         if st.button("Salvar alterações", key=save_key):
-                            try:
-                                if isinstance(nova_data, str):
-                                    nova_data = datetime.date.fromisoformat(nova_data)
-                                st.session_state.peso[idx] = float(novo_valor)
-                                st.session_state.datas_peso[idx] = nova_data
-                                add_to_historico({
-                                    "data": nova_data,
-                                    "tipo": "peso",
-                                    "nome": "Registro de peso",
-                                    "quantidade": float(novo_valor),
-                                    "pontos": 0,
-                                    "usou_extras": 0.0
-                                })
-                                # Atualiza meta diária automaticamente
-                                st.session_state.meta_diaria = calcular_meta_diaria(
-                                    sexo=st.session_state.sexo,
-                                    idade=st.session_state.idade,
-                                    peso=novo_valor,
-                                    altura=st.session_state.altura,
-                                    objetivo=st.session_state.objetivo,
-                                    nivel_atividade=st.session_state.nivel_atividade
-                                )
-                                persist_all()
-                                st.success("Peso atualizado com sucesso!")
-                                st.experimental_rerun()
-                            except Exception as e:
-                                st.error(f"Erro ao salvar alterações: {e}")
+                            reg["valor"] = float(new_peso)
+
+                            # Atualiza meta diária automaticamente
+                            st.session_state.meta_diaria = calcular_meta_diaria(
+                                sexo=st.session_state.sexo,
+                                idade=st.session_state.idade,
+                                peso=new_peso,
+                                altura=st.session_state.altura,
+                                objetivo=st.session_state.objetivo,
+                                nivel_atividade=st.session_state.nivel_atividade
+                            )
+
+                            persist_all()
+                            st.success(f"Registro atualizado para {new_peso:.2f} kg. Meta diária: {st.session_state.meta_diaria} pts")
+                            rerun_streamlit()
 
                 # Excluir peso
                 if cols[2].button("❌", key=f"del_peso_{idx}"):
@@ -1236,26 +1219,10 @@ def consultar_alimento():
             salvar = st.form_submit_button("💾 Salvar alterações")
             if salvar:
                 porcao_val = safe_parse_porçao(porcao_novo)
-                alimento_nome = nome_novo.strip()
-                qtd = porcao_val
-                pontos = calcular_pontos({
-                    "Nome": alimento_nome,
-                    "Porcao": qtd,
-                    "Calorias": calorias_novo,
-                    "Carbo": carbo_novo,
-                    "Gordura": gordura_novo,
-                    "Saturada": saturada_novo,
-                    "Fibra": fibra_novo,
-                    "Açúcar": acucar_novo,
-                    "Proteina": proteina_novo,
-                    "Sodio_mg": sodio_novo,
-                    "ZeroPontos": zero_ponto_novo
-                })
-
-                # Atualiza alimento
+                # Atualiza alimento antes de recalcular pontos
                 alimento.update({
-                    "Nome": alimento_nome,
-                    "Porcao": qtd,
+                    "Nome": nome_novo.strip(),
+                    "Porcao": porcao_val,
                     "Calorias": round(calorias_novo, 2),
                     "Carbo": round(carbo_novo, 2),
                     "Gordura": round(gordura_novo, 2),
@@ -1264,50 +1231,14 @@ def consultar_alimento():
                     "Açúcar": round(acucar_novo, 2),
                     "Proteina": round(proteina_novo, 2),
                     "Sodio_mg": round(sodio_novo, 2),
-                    "ZeroPontos": zero_ponto_novo,
-                    "Pontos": pontos
+                    "ZeroPontos": zero_ponto_novo
                 })
 
-                # 🔹 Novo bloco para atualizar históricos
-                if st.button("Salvar alterações", key=f"save_edit_alimento_{idx}"):
-                    try:
-                        st.session_state.consumo_historico[idx]["nome"] = alimento_nome
-                        st.session_state.consumo_historico[idx]["quantidade"] = qtd
-                        st.session_state.consumo_historico[idx]["pontos"] = pontos
-
-                        # Atualiza pontos_semana
-                        semana_atual = datetime.date.today().isocalendar()[1]
-                        semana_existente = next((s for s in st.session_state.pontos_semana if s["semana"] == semana_atual), None)
-                        if not semana_existente:
-                            semana_existente = {"semana": semana_atual, "pontos": [], "extras": 36.0}
-                            st.session_state.pontos_semana.append(semana_existente)
-                        semana_existente["pontos"].append({
-                            "data": datetime.date.today(),
-                            "nome": alimento_nome,
-                            "quantidade": qtd,
-                            "pontos": pontos,
-                            "usou_extras": 0.0
-                        })
-
-                        # Atualiza histórico acumulado
-                        add_to_historico({
-                            "data": datetime.date.today(),
-                            "tipo": "alimento",
-                            "nome": alimento_nome,
-                            "quantidade": qtd,
-                            "pontos": pontos,
-                            "usou_extras": 0.0
-                        })
-
-                        persist_all()
-                        st.success("Alimento atualizado com sucesso!")
-                        st.experimental_rerun()
-                    except Exception as e:
-                        st.error(f"Erro ao salvar alterações: {e}")
-
+                # Recalcula pontos
+                alimento["Pontos"] = calcular_pontos(alimento)
                 persist_all()
                 st.session_state[flag_key] = False
-                st.success(f"Alimento '{alimento_nome}' atualizado com sucesso! Pontos: {pontos}")
+                st.success(f"Alimento '{nome_novo}' atualizado com sucesso! Pontos: {alimento['Pontos']}")
                 rerun_streamlit()
 
 # -----------------------------
@@ -1456,17 +1387,9 @@ if st.session_state.menu == "🏠 Dashboard":
         st.plotly_chart(fig_gauge, use_container_width=True)
 
 # -----------------------------
-# FUNÇÃO PARA EXIBIR HISTÓRICOS NO DASHBOARD (AJUSTADA)
+# FUNÇÃO PARA EXIBIR HISTÓRICOS NO DASHBOARD
 # -----------------------------
 def exibir_historicos_dashboard():
-    # Inicializa flags de exibição de históricos
-    if "mostrar_historico_consumo" not in st.session_state:
-        st.session_state.mostrar_historico_consumo = False
-    if "mostrar_historico_atividade" not in st.session_state:
-        st.session_state.mostrar_historico_atividade = False
-    if "mostrar_historico_peso" not in st.session_state:
-        st.session_state.mostrar_historico_peso = False
-
     col_hist1, col_hist2, col_hist3 = st.columns(3)
     historico = st.session_state.get("historico_acumulado", [])
 
@@ -1493,74 +1416,21 @@ def exibir_historicos_dashboard():
     # -----------------------------
     with col_hist1:
         st.markdown("### 📊 Pontos / Consumo Diário")
-        consumos = [r for r in historico if r["tipo"] == "alimento"]
+
+        consumos = [r for r in historico if r["tipo"] == "consumo"]
         consumos = [r for r in consumos if parse_date(r["data"]) == hoje]
 
         if consumos:
-            for i, reg in enumerate(sorted(consumos, key=lambda x: parse_date(x["data"]))):
+            for reg in sorted(consumos, key=lambda x: parse_date(x["data"])):
                 dia = parse_date(reg["data"])
                 dia_str = dia.strftime("%d/%m/%Y") if dia else str(reg["data"])
                 dia_sem = weekday_name_br(dia) if dia else ""
-                display_text = f"{dia_str} ({dia_sem}): {reg['nome']} {reg.get('quantidade',0):.2f} g ({reg.get('pontos',0):.2f} pts)"
-
-                cols = st.columns([6,1,1])
-                cols[0].write(display_text)
-
-                # Botão Editar
-                if cols[1].button("Editar", key=f"edit_cons_dash_{i}"):
-                    edit_key_q = f"edit_cons_q_{i}"
-                    novo_nome = reg["nome"]
-                    nova_qtd = reg["quantidade"]
-                    novos_pontos = reg["pontos"]
-                    with st.expander(f"Editar registro #{i}", expanded=True):
-                        nova_qtd = st.number_input("Quantidade (g):", min_value=0.0, step=1.0, value=nova_qtd, key=edit_key_q)
-
-                        # ⚠ Botão Salvar alterações dentro do loop
-                        if st.button("Salvar alterações", key=f"save_edit_cons_dash_{i}"):
-                            try:
-                                # Atualiza histórico de consumo
-                                st.session_state.consumo_historico[i]["nome"] = novo_nome
-                                st.session_state.consumo_historico[i]["quantidade"] = nova_qtd
-                                st.session_state.consumo_historico[i]["pontos"] = novos_pontos
-
-                                # Atualiza pontos_semana
-                                semana_atual = datetime.date.today().isocalendar()[1]
-                                semana_existente = next((s for s in st.session_state.pontos_semana if s["semana"] == semana_atual), None)
-                                if not semana_existente:
-                                    semana_existente = {"semana": semana_atual, "pontos": [], "extras": 36.0}
-                                    st.session_state.pontos_semana.append(semana_existente)
-                                semana_existente["pontos"].append({
-                                    "data": datetime.date.today(),
-                                    "nome": novo_nome,
-                                    "quantidade": nova_qtd,
-                                    "pontos": novos_pontos,
-                                    "usou_extras": 0.0
-                                })
-
-                                # Atualiza histórico acumulado
-                                add_to_historico({
-                                    "data": datetime.date.today(),
-                                    "tipo": "alimento",
-                                    "nome": novo_nome,
-                                    "quantidade": nova_qtd,
-                                    "pontos": novos_pontos,
-                                    "usou_extras": 0.0
-                                })
-
-                                persist_all()
-                                st.success("Consumo atualizado com sucesso!")
-                                st.experimental_rerun()
-                            except Exception as e:
-                                st.error(f"Erro ao salvar alterações: {e}")
-
-                # Botão Excluir
-                if cols[2].button("❌", key=f"del_cons_dash_{i}"):
-                    st.session_state.consumo_historico.pop(i)
-                    rebuild_pontos_semana_from_history()
-                    persist_all()
-                    st.success("Registro excluído.")
-                    st.experimental_rerun()
-
+                st.markdown(
+                    f"<div style='padding:10px; border:1px solid #f39c12; border-radius:5px; margin-bottom:5px;'>"
+                    f"{dia_str} ({dia_sem}): {reg['nome']} {reg.get('quantidade',0):.2f} g "
+                    f"<span style='color:#1f3c88'>({reg.get('pontos',0):.2f} pts)</span>"
+                    f"</div>", unsafe_allow_html=True
+                )
         else:
             st.write(" - (sem registros hoje)")
 
@@ -1684,79 +1554,69 @@ def registrar_atividade_fisica():
             st.session_state.mostrar_historico_atividade = True
             st.stop()
 
-# -----------------------------
-# Histórico de atividades
-# -----------------------------
-historico = st.session_state.get("historico_acumulado", [])
+    # -----------------------------
+    # Histórico de atividades
+    # -----------------------------
+    historico = st.session_state.get("historico_acumulado", [])
 
-def parse_date(d):
-    if isinstance(d, datetime.date):
-        return d
-    try:
-        return datetime.date.fromisoformat(str(d))
-    except:
-        return None
+    def parse_date(d):
+        if isinstance(d, datetime.date):
+            return d
+        try:
+            return datetime.date.fromisoformat(str(d))
+        except:
+            return None
 
-atividades = [r for r in historico if r["tipo"] == "atividade"]
+    atividades = [r for r in historico if r["tipo"] == "atividade"]
 
-with st.expander("Histórico de Atividades", expanded=st.session_state.mostrar_historico_atividade):
-    if not atividades:
-        st.info("Nenhuma atividade registrada ainda.")
-    else:
-        for idx, reg in enumerate(sorted(atividades, key=lambda x: parse_date(x["data"]), reverse=True)):
-            dia = parse_date(reg["data"])
-            dia_str = dia.strftime("%d/%m/%Y") if dia else str(reg["data"])
-            dia_sem = weekday_name_br(dia) if dia else ""
-            col1, col2, col3, col4 = st.columns([4, 2, 1, 1])
-            col1.write(f"{reg['tipo_atividade']} - {reg['minutos']} min")
-            col2.write(f"{reg['pontos']} pts")
+    with st.expander("Histórico de Atividades", expanded=st.session_state.mostrar_historico_atividade):
+        if not atividades:
+            st.info("Nenhuma atividade registrada ainda.")
+        else:
+            for idx, reg in enumerate(sorted(atividades, key=lambda x: parse_date(x["data"]), reverse=True)):
+                dia = parse_date(reg["data"])
+                dia_str = dia.strftime("%d/%m/%Y") if dia else str(reg["data"])
+                dia_sem = weekday_name_br(dia) if dia else ""
+                col1, col2, col3, col4 = st.columns([4, 2, 1, 1])
+                col1.write(f"{reg['tipo_atividade']} - {reg['minutos']} min")
+                col2.write(f"{reg['pontos']} pts")
 
-            # Botão Editar
-            if col3.button("✏️", key=f"edit_{idx}"):
-                edit_key_tipo = f"edit_tipo_{idx}"
-                edit_key_min = f"edit_min_{idx}"
-                with st.expander(f"Editar atividade #{idx}", expanded=True):
-                    novo_tipo = st.selectbox(
-                        "Tipo de atividade",
-                        list(pontos_base.keys()),
-                        index=list(pontos_base.keys()).index(reg["tipo_atividade"]),
-                        key=edit_key_tipo
-                    )
-                    novo_min = st.number_input(
-                        "Duração (minutos)",
-                        min_value=1,
-                        max_value=300,
-                        value=reg["minutos"],
-                        key=edit_key_min
-                    )
-                    if st.button("Salvar alterações", key=f"save_edit_atividade_{idx}"):
-                        try:
-                            novos_pontos = pontos_base.get(novo_tipo, 0) * (novo_min / 30.0)
-                            st.session_state.activities[idx]["tipo"] = novo_tipo
-                            st.session_state.activities[idx]["duracao"] = novo_min
-                            st.session_state.activities[idx]["pontos"] = novos_pontos
-
-                            add_to_historico({
-                                "data": datetime.date.today(),
-                                "tipo": "atividade",
-                                "nome": novo_tipo,
-                                "quantidade": novo_min,
-                                "pontos": novos_pontos,
-                                "usou_extras": 0.0
+                # Botão Editar
+                if col3.button("✏️", key=f"edit_{idx}"):
+                    edit_key_tipo = f"edit_tipo_{idx}"
+                    edit_key_min = f"edit_min_{idx}"
+                    with st.expander(f"Editar atividade #{idx}", expanded=True):
+                        novo_tipo = st.selectbox(
+                            "Tipo de atividade",
+                            list(pontos_base.keys()),
+                            index=list(pontos_base.keys()).index(reg["tipo_atividade"]),
+                            key=edit_key_tipo
+                        )
+                        novo_min = st.number_input(
+                            "Duração (minutos)",
+                            min_value=1,
+                            max_value=300,
+                            value=reg["minutos"],
+                            key=edit_key_min
+                        )
+                        if st.button("Salvar alterações", key=f"save_{idx}"):
+                            novo_pts = round_points((novo_min / minutos_base) * pontos_base.get(novo_tipo, 1))
+                            reg.update({
+                                "tipo_atividade": novo_tipo,
+                                "minutos": novo_min,
+                                "pontos": novo_pts
                             })
-
                             persist_all()
-                            st.success("Atividade atualizada com sucesso!")
-                            st.experimental_rerun()
-                        except Exception as e:
-                            st.error(f"Erro ao salvar alterações: {e}")
+                            st.success("Atividade atualizada!")
+                            st.stop()
 
-            # Botão Excluir
-            if col4.button("❌", key=f"del_{idx}"):
-                historico.remove(reg)
-                persist_all()
-                st.success("Atividade removida.")
-                st.stop()
+                # Botão Excluir
+                if col4.button("❌", key=f"del_{idx}"):
+                    historico.remove(reg)
+                    persist_all()
+                    st.success("Atividade removida.")
+                    st.stop()
+
 
 # -----------------------------
 # Página Históricos Acumulados (corrigida)
@@ -1793,12 +1653,12 @@ def gerar_html_relatorio(consumo_filtrado, atividades_filtrado, peso_filtrado, p
     html += f"<h1>Histórico Acumulado - Vigilantes do Peso</h1>"
     html += f"<p>Período: {data_inicio.strftime('%d/%m/%Y')} → {data_fim.strftime('%d/%m/%Y')}</p>"
 
-    # Pontos Semanais
-    html += "<h2>Pontos Semanais</h2><table><tr><th>Semana</th><th>Data</th><th>Nome</th><th>Quantidade</th><th>Pontos</th><th>Extras usados</th></tr>"
+    # Pontos Semanais Extras
+    html += "<h2>Pontos Semanais Extras</h2><table><tr><th>Semana</th><th>Data</th><th>Nome</th><th>Quantidade</th><th>Pontos</th><th>Extras usados</th></tr>"
     for w in pontos_semana:
         for r in w.get("pontos", []):
             r_data = parse_date(r["data"])
-            if r_data and data_inicio <= r_data <= data_fim:
+            if r_data and data_inicio <= r_data <= data_fim and r.get("usou_extras", 0) > 0:
                 html += f"<tr><td>{w['semana']}</td><td>{r_data.strftime('%d/%m/%Y')}</td><td>{r['nome']}</td><td>{format_num(r.get('quantidade',0))}</td><td>{format_num(r.get('pontos',0))}</td><td>{format_num(r.get('usou_extras',0))}</td></tr>"
     html += "</table>"
 
@@ -1949,23 +1809,22 @@ def exibir_relatorio(consumo_filtrado, historico_acumulado, peso_filtrado, data_
 
     # -----------------------------
     # Pontos Semanais Extras
-    pontos_semanais = [r for r in consumo_filtrado if r.get("usou_extras",0) > 0]
+    pontos_extras = []
     for semana in st.session_state.pontos_semana:
         for r in semana.get("pontos", []):
-            if r.get("usou_extras",0) > 0:
-                r_copy = r.copy()
-                r_copy["tipo"] = "consumo"
-                pontos_semanais.append(r_copy)
+            r_data = parse_date(r.get("data"))
+            if r.get("usou_extras",0) > 0 and r_data and data_inicio <= r_data <= data_fim:
+                pontos_extras.append({
+                    "Data": r_data.strftime("%d/%m/%Y"),
+                    "Nome": r["nome"],
+                    "Quantidade": format_num(r.get("quantidade",0)),
+                    "Pontos": format_num(r.get("pontos",0)),
+                    "Extras usados": format_num(r.get("usou_extras",0))
+                })
 
-    if pontos_semanais:
+    if pontos_extras:
         st.markdown("### Pontos Semanais Extras")
-        st.table([{
-            "Data": parse_date(r["data"]).strftime("%d/%m/%Y"),
-            "Nome": r["nome"],
-            "Quantidade": format_num(r.get("quantidade",0)),
-            "Pontos": format_num(r.get("pontos",0)),
-            "Extras usados": format_num(r.get("usou_extras",0))
-        } for r in pontos_semanais])
+        st.table(pontos_extras)
 
     # -----------------------------
     # Botão verde para baixar HTML
@@ -1973,7 +1832,7 @@ def exibir_relatorio(consumo_filtrado, historico_acumulado, peso_filtrado, data_
         consumo_filtrado,
         atividades_filtrado_local,
         peso_filtrado,
-        pontos_semanais,
+        st.session_state.pontos_semana,  # passa pontos_semana completo
         data_inicio,
         data_fim,
         incluir_consumo,
