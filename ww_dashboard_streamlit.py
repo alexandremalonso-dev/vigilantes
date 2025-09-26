@@ -79,6 +79,25 @@ def save_data(data, file_path):
         st.error(f"Erro ao salvar dados: {e}")
 
 
+
+def add_to_historico(entry: dict):
+    """Adiciona ou atualiza entrada no histórico acumulado sem duplicidade"""
+    # Normaliza data
+    if isinstance(entry.get("data"), datetime.date):
+        entry["data"] = entry["data"].isoformat()
+
+    # Evitar duplicidade (mesma data + tipo + nome)
+    for idx, old in enumerate(st.session_state.historico_acumulado):
+        if (old.get("data") == entry.get("data")
+            and old.get("tipo") == entry.get("tipo")
+            and old.get("nome") == entry.get("nome")):
+            st.session_state.historico_acumulado[idx] = entry
+            persist_all()
+            return
+
+    st.session_state.historico_acumulado.append(entry)
+    persist_all()
+
 def persist_all():
     # salva todos os dados do usuário atual
     global data_store, activities
@@ -1653,12 +1672,12 @@ def gerar_html_relatorio(consumo_filtrado, atividades_filtrado, peso_filtrado, p
     html += f"<h1>Histórico Acumulado - Vigilantes do Peso</h1>"
     html += f"<p>Período: {data_inicio.strftime('%d/%m/%Y')} → {data_fim.strftime('%d/%m/%Y')}</p>"
 
-    # Pontos Semanais Extras
-    html += "<h2>Pontos Semanais Extras</h2><table><tr><th>Semana</th><th>Data</th><th>Nome</th><th>Quantidade</th><th>Pontos</th><th>Extras usados</th></tr>"
+    # Pontos Semanais
+    html += "<h2>Pontos Semanais</h2><table><tr><th>Semana</th><th>Data</th><th>Nome</th><th>Quantidade</th><th>Pontos</th><th>Extras usados</th></tr>"
     for w in pontos_semana:
         for r in w.get("pontos", []):
             r_data = parse_date(r["data"])
-            if r_data and data_inicio <= r_data <= data_fim and r.get("usou_extras", 0) > 0:
+            if r_data and data_inicio <= r_data <= data_fim:
                 html += f"<tr><td>{w['semana']}</td><td>{r_data.strftime('%d/%m/%Y')}</td><td>{r['nome']}</td><td>{format_num(r.get('quantidade',0))}</td><td>{format_num(r.get('pontos',0))}</td><td>{format_num(r.get('usou_extras',0))}</td></tr>"
     html += "</table>"
 
@@ -1809,22 +1828,23 @@ def exibir_relatorio(consumo_filtrado, historico_acumulado, peso_filtrado, data_
 
     # -----------------------------
     # Pontos Semanais Extras
-    pontos_extras = []
+    pontos_semanais = [r for r in consumo_filtrado if r.get("usou_extras",0) > 0]
     for semana in st.session_state.pontos_semana:
         for r in semana.get("pontos", []):
-            r_data = parse_date(r.get("data"))
-            if r.get("usou_extras",0) > 0 and r_data and data_inicio <= r_data <= data_fim:
-                pontos_extras.append({
-                    "Data": r_data.strftime("%d/%m/%Y"),
-                    "Nome": r["nome"],
-                    "Quantidade": format_num(r.get("quantidade",0)),
-                    "Pontos": format_num(r.get("pontos",0)),
-                    "Extras usados": format_num(r.get("usou_extras",0))
-                })
+            if r.get("usou_extras",0) > 0:
+                r_copy = r.copy()
+                r_copy["tipo"] = "consumo"
+                pontos_semanais.append(r_copy)
 
-    if pontos_extras:
+    if pontos_semanais:
         st.markdown("### Pontos Semanais Extras")
-        st.table(pontos_extras)
+        st.table([{
+            "Data": parse_date(r["data"]).strftime("%d/%m/%Y"),
+            "Nome": r["nome"],
+            "Quantidade": format_num(r.get("quantidade",0)),
+            "Pontos": format_num(r.get("pontos",0)),
+            "Extras usados": format_num(r.get("usou_extras",0))
+        } for r in pontos_semanais])
 
     # -----------------------------
     # Botão verde para baixar HTML
@@ -1832,7 +1852,7 @@ def exibir_relatorio(consumo_filtrado, historico_acumulado, peso_filtrado, data_
         consumo_filtrado,
         atividades_filtrado_local,
         peso_filtrado,
-        st.session_state.pontos_semana,  # passa pontos_semana completo
+        pontos_semanais,
         data_inicio,
         data_fim,
         incluir_consumo,
