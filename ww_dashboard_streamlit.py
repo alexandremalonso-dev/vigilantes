@@ -1653,12 +1653,12 @@ def gerar_html_relatorio(consumo_filtrado, atividades_filtrado, peso_filtrado, p
     html += f"<h1>Histórico Acumulado - Vigilantes do Peso</h1>"
     html += f"<p>Período: {data_inicio.strftime('%d/%m/%Y')} → {data_fim.strftime('%d/%m/%Y')}</p>"
 
-    # Pontos Semanais
-    html += "<h2>Pontos Semanais</h2><table><tr><th>Semana</th><th>Data</th><th>Nome</th><th>Quantidade</th><th>Pontos</th><th>Extras usados</th></tr>"
+    # Pontos Semanais Extras
+    html += "<h2>Pontos Semanais Extras</h2><table><tr><th>Semana</th><th>Data</th><th>Nome</th><th>Quantidade</th><th>Pontos</th><th>Extras usados</th></tr>"
     for w in pontos_semana:
         for r in w.get("pontos", []):
             r_data = parse_date(r["data"])
-            if r_data and data_inicio <= r_data <= data_fim:
+            if r_data and data_inicio <= r_data <= data_fim and r.get("usou_extras", 0) > 0:
                 html += f"<tr><td>{w['semana']}</td><td>{r_data.strftime('%d/%m/%Y')}</td><td>{r['nome']}</td><td>{format_num(r.get('quantidade',0))}</td><td>{format_num(r.get('pontos',0))}</td><td>{format_num(r.get('usou_extras',0))}</td></tr>"
     html += "</table>"
 
@@ -1809,23 +1809,22 @@ def exibir_relatorio(consumo_filtrado, historico_acumulado, peso_filtrado, data_
 
     # -----------------------------
     # Pontos Semanais Extras
-    pontos_semanais = [r for r in consumo_filtrado if r.get("usou_extras",0) > 0]
+    pontos_extras = []
     for semana in st.session_state.pontos_semana:
         for r in semana.get("pontos", []):
-            if r.get("usou_extras",0) > 0:
-                r_copy = r.copy()
-                r_copy["tipo"] = "consumo"
-                pontos_semanais.append(r_copy)
+            r_data = parse_date(r.get("data"))
+            if r.get("usou_extras",0) > 0 and r_data and data_inicio <= r_data <= data_fim:
+                pontos_extras.append({
+                    "Data": r_data.strftime("%d/%m/%Y"),
+                    "Nome": r["nome"],
+                    "Quantidade": format_num(r.get("quantidade",0)),
+                    "Pontos": format_num(r.get("pontos",0)),
+                    "Extras usados": format_num(r.get("usou_extras",0))
+                })
 
-    if pontos_semanais:
+    if pontos_extras:
         st.markdown("### Pontos Semanais Extras")
-        st.table([{
-            "Data": parse_date(r["data"]).strftime("%d/%m/%Y"),
-            "Nome": r["nome"],
-            "Quantidade": format_num(r.get("quantidade",0)),
-            "Pontos": format_num(r.get("pontos",0)),
-            "Extras usados": format_num(r.get("usou_extras",0))
-        } for r in pontos_semanais])
+        st.table(pontos_extras)
 
     # -----------------------------
     # Botão verde para baixar HTML
@@ -1833,7 +1832,7 @@ def exibir_relatorio(consumo_filtrado, historico_acumulado, peso_filtrado, data_
         consumo_filtrado,
         atividades_filtrado_local,
         peso_filtrado,
-        pontos_semanais,
+        st.session_state.pontos_semana,  # passa pontos_semana completo
         data_inicio,
         data_fim,
         incluir_consumo,
