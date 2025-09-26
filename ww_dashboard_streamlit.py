@@ -1614,7 +1614,7 @@ def registrar_atividade_fisica():
 
 
 # -----------------------------
-# Função Históricos Acumulados (ajustada)
+# Página Históricos Acumulados (corrigida)
 # -----------------------------
 import streamlit as st
 import datetime
@@ -1651,7 +1651,7 @@ def gerar_html_relatorio(consumo_filtrado, atividades_filtrado, peso_filtrado, p
         for r in w.get("pontos", []):
             r_data = parse_date(r["data"])
             if r_data and data_inicio <= r_data <= data_fim:
-                html += f"<tr><td>{w['semana']}</td><td>{r_data.strftime('%d/%m/%Y')}</td><td>{r['nome']}</td><td>{r['quantidade']}</td><td>{r['pontos']}</td><td>{r.get('usou_extras',0)}</td></tr>"
+                html += f"<tr><td>{w['semana']}</td><td>{r_data.strftime('%d/%m/%Y')}</td><td>{r['nome']}</td><td>{r.get('quantidade',0)}</td><td>{r.get('pontos',0)}</td><td>{r.get('usou_extras',0)}</td></tr>"
     html += "</table>"
 
     # Consumo Diário
@@ -1697,6 +1697,11 @@ def botao_download_html(html_content):
 # -----------------------------
 def historico_acumulado_page():
     st.header("📅 Seleção de Período para Histórico Acumulado")
+
+    # Garantir que a lista existe
+    if "pontos_semana" not in st.session_state:
+        st.session_state.pontos_semana = []
+
     col1, col2, col3 = st.columns([2,2,1])
     with col1:
         data_inicio = st.date_input("Data Início", value=datetime.date.today() - datetime.timedelta(days=30))
@@ -1708,36 +1713,35 @@ def historico_acumulado_page():
     incluir_atividades = st.checkbox("Incluir atividades físicas", value=True)
     incluir_consumo = st.checkbox("Incluir consumo diário", value=True)
 
+    def parse_date(d):
+        if isinstance(d, datetime.date):
+            return d
+        try:
+            return datetime.date.fromisoformat(str(d))
+        except:
+            return None
+
     if gerar:
         historico = st.session_state.get("historico_acumulado", [])
-
-        def parse_date(d):
-            if isinstance(d, datetime.date):
-                return d
-            try:
-                return datetime.date.fromisoformat(str(d))
-            except:
-                return None
 
         consumo_filtrado = [r for r in historico if r["tipo"]=="consumo" and parse_date(r["data"]) and data_inicio <= parse_date(r["data"]) <= data_fim]
         atividades_filtrado = [r for r in historico if r["tipo"]=="atividade" and parse_date(r["data"]) and data_inicio <= parse_date(r["data"]) <= data_fim]
         peso_filtrado = [r for r in historico if r["tipo"]=="peso" and parse_date(r["data"]) and data_inicio <= parse_date(r["data"]) <= data_fim]
 
-        # ⚡ Chamada para exibir relatório na tela
         exibir_relatorio(
-            consumo_filtrado,
-            atividades_filtrado,
-            peso_filtrado,
-            data_inicio,
-            data_fim,
-            incluir_consumo,
-            incluir_atividades
+            consumo_filtrado=consumo_filtrado,
+            historico_acumulado=historico,
+            peso_filtrado=peso_filtrado,
+            data_inicio=data_inicio,
+            data_fim=data_fim,
+            incluir_consumo=incluir_consumo,
+            incluir_atividades=incluir_atividades
         )
 
 # -----------------------------
 # Função para exibir relatório
 # -----------------------------
-def exibir_relatorio(consumo_filtrado, atividades_filtrado, peso_filtrado, data_inicio, data_fim,
+def exibir_relatorio(consumo_filtrado, historico_acumulado, peso_filtrado, data_inicio, data_fim,
                      incluir_consumo=True, incluir_atividades=True):
 
     def parse_date(d):
@@ -1748,21 +1752,19 @@ def exibir_relatorio(consumo_filtrado, atividades_filtrado, peso_filtrado, data_
         except:
             return None
 
-    # Atividades filtradas locais
+    # Atividades: usar o histórico acumulado filtrado por data
     atividades_filtrado_local = []
     if incluir_atividades:
-        for semana in st.session_state.pontos_semana:
-            for a in semana.get("atividades", []):
-                try:
-                    data_atividade = datetime.date.fromisoformat(a["horario"]) if isinstance(a["horario"], str) else a["horario"]
-                except Exception:
-                    continue
-                if data_inicio <= data_atividade <= data_fim:
-                    a_display = a.copy()
-                    a_display["tipo_atividade"] = a.get("tipo","—")
-                    a_display["data"] = data_atividade
+        for r in historico_acumulado:
+            if r["tipo"]=="atividade":
+                r_data = parse_date(r["data"])
+                if r_data and data_inicio <= r_data <= data_fim:
+                    a_display = r.copy()
+                    a_display["tipo_atividade"] = r.get("tipo_atividade", r.get("tipo","—"))
+                    a_display["data"] = r_data
                     atividades_filtrado_local.append(a_display)
 
+    # -----------------------------
     # Consumo Diário
     if incluir_consumo and consumo_filtrado:
         st.markdown("### Consumo Diário")
@@ -1774,6 +1776,7 @@ def exibir_relatorio(consumo_filtrado, atividades_filtrado, peso_filtrado, data_
             "Extras usados": r.get("usou_extras",0)
         } for r in consumo_filtrado])
 
+    # -----------------------------
     # Atividades Físicas
     if incluir_atividades and atividades_filtrado_local:
         st.markdown("### Atividades Físicas")
@@ -1784,6 +1787,7 @@ def exibir_relatorio(consumo_filtrado, atividades_filtrado, peso_filtrado, data_
             "Pontos": r.get("pontos",0)
         } for r in atividades_filtrado_local])
 
+    # -----------------------------
     # Peso
     if peso_filtrado:
         st.markdown("### Peso")
@@ -1792,19 +1796,28 @@ def exibir_relatorio(consumo_filtrado, atividades_filtrado, peso_filtrado, data_
             "Peso (kg)": r["valor"]
         } for r in peso_filtrado])
 
+    # -----------------------------
     # Pontos Semanais Extras
     pontos_semanais = [r for r in consumo_filtrado if r.get("usou_extras",0) > 0]
+    for semana in st.session_state.pontos_semana:
+        for r in semana.get("pontos", []):
+            if r.get("usou_extras",0) > 0:
+                r_copy = r.copy()
+                r_copy["tipo"] = "consumo"
+                pontos_semanais.append(r_copy)
+
     if pontos_semanais:
         st.markdown("### Pontos Semanais Extras")
         st.table([{
             "Data": parse_date(r["data"]).strftime("%d/%m/%Y"),
             "Nome": r["nome"],
-            "Quantidade": r["quantidade"],
-            "Pontos": r["pontos"],
+            "Quantidade": r.get("quantidade",0),
+            "Pontos": r.get("pontos",0),
             "Extras usados": r.get("usou_extras",0)
         } for r in pontos_semanais])
 
-    # Botão para baixar HTML
+    # -----------------------------
+    # Botão verde para baixar HTML
     html_relatorio = gerar_html_relatorio(
         consumo_filtrado,
         atividades_filtrado_local,
