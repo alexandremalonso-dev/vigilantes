@@ -677,7 +677,7 @@ def importar_planilha():
             st.error(f"Erro ao importar planilha: {e}\n(Se for .xlsx, instale openpyxl: pip install openpyxl)")
 
 # -----------------------------
-# FUNÇÃO REGISTRAR CONSUMO (REVISADA)
+# FUNÇÃO REGISTRAR CONSUMO (REVISADA COM EXTRAS)
 # -----------------------------
 def registrar_consumo():
     st.header("🍴 Registrar Consumo")
@@ -703,6 +703,8 @@ def registrar_consumo():
         st.session_state.mostrar_historico_consumo = False
     if "consumo_historico" not in st.session_state:
         st.session_state.consumo_historico = []
+    if "pontos_semana" not in st.session_state:
+        st.session_state.pontos_semana = []
 
     # Formulário para registrar quantidade
     with st.form("form_reg_consumo", clear_on_submit=False):
@@ -726,12 +728,12 @@ def registrar_consumo():
                 "nome": escolha,
                 "quantidade": float(quantidade),
                 "pontos": pontos_registrados,
-                "usou_extras": 0.0
+                "usou_extras": 0.0  # inicial
             }
             st.session_state.consumo_historico.append(registro)
 
-            # Recalcula pontos semanais e persiste
-            rebuild_pontos_semana_from_history()
+            # Recalcula pontos semanais incluindo extras
+            rebuild_pontos_semana_from_history()  # aqui já deve atualizar o campo usou_extras
             persist_all()
             st.success(
                 f"🍴 Registrado {quantidade:.2f}g de {escolha}. "
@@ -778,7 +780,7 @@ def registrar_consumo():
                         if st.button("Salvar alterações", key=save_key):
                             reg["quantidade"] = float(new_q)
                             reg["pontos"] = new_p
-                            rebuild_pontos_semana_from_history()
+                            rebuild_pontos_semana_from_history()  # atualiza extras
                             persist_all()
                             st.success("Registro atualizado!")
                             rerun_streamlit()
@@ -786,7 +788,7 @@ def registrar_consumo():
                 # Excluir registro
                 if cols[2].button("Excluir", key=f"del_cons_{idx}"):
                     st.session_state.consumo_historico.pop(idx)
-                    rebuild_pontos_semana_from_history()
+                    rebuild_pontos_semana_from_history()  # atualiza extras
                     persist_all()
                     st.success("Registro excluído.")
                     rerun_streamlit()
