@@ -1614,7 +1614,7 @@ def registrar_atividade_fisica():
 
 
 # -----------------------------
-# Função Históricos Acumulados
+# Função Históricos Acumulados (com ajustes)
 # -----------------------------
 import streamlit as st
 import datetime
@@ -1686,11 +1686,16 @@ def botao_download_html(html_content):
 # -----------------------------
 def historico_acumulado_page():
     st.header("📅 Seleção de Período para Histórico Acumulado")
-    col1, col2, col3 = st.columns([2,2,1])
+    col1, col2, col3 = st.columns([2, 2, 1])
+    
     with col1:
-        data_inicio = st.date_input("Data Início", value=datetime.date.today() - datetime.timedelta(days=30))
+        data_inicio = st.date_input(
+            "Data Início", value=datetime.date.today() - datetime.timedelta(days=30)
+        )
     with col2:
-        data_fim = st.date_input("Data Fim", value=datetime.date.today())
+        data_fim = st.date_input(
+            "Data Fim", value=datetime.date.today()
+        )
     with col3:
         gerar = st.button("📄 Aplicar Filtro")
 
@@ -1698,34 +1703,47 @@ def historico_acumulado_page():
     incluir_consumo = st.checkbox("Incluir consumo diário", value=True)
 
     # -----------------------------
-    # Filtrar dados do histórico acumulado
+    # Só processa quando o botão for clicado
     # -----------------------------
-    historico = st.session_state.get("historico_acumulado", [])
+    if gerar:
+        historico = st.session_state.get("historico_acumulado", [])
 
-    # Normalizar datas para datetime.date
-    def parse_date(d):
-        if isinstance(d, datetime.date):
-            return d
-        try:
-            return datetime.date.fromisoformat(str(d))
-        except:
-            return None
+        # Normalizar datas
+        def parse_date(d):
+            if isinstance(d, datetime.date):
+                return d
+            try:
+                return datetime.date.fromisoformat(str(d))
+            except:
+                return None
 
-    consumo_filtrado = [
-        r for r in historico
-        if r["tipo"] == "consumo" and (parse_date(r["data"]) and data_inicio <= parse_date(r["data"]) <= data_fim)
-    ]
-    atividades_filtrado = [
-        r for r in historico
-        if r["tipo"] == "atividade" and (parse_date(r["data"]) and data_inicio <= parse_date(r["data"]) <= data_fim)
-    ]
-    peso_filtrado = [
-        r for r in historico
-        if r["tipo"] == "peso" and (parse_date(r["data"]) and data_inicio <= parse_date(r["data"]) <= data_fim)
-    ]
+        # Filtrar dados pelo período
+        consumo_filtrado = [
+            r for r in historico
+            if r["tipo"] == "consumo" and (parse_date(r["data"]) and data_inicio <= parse_date(r["data"]) <= data_fim)
+        ]
+        atividades_filtrado = [
+            r for r in historico
+            if r["tipo"] == "atividade" and (parse_date(r["data"]) and data_inicio <= parse_date(r["data"]) <= data_fim)
+        ]
+        peso_filtrado = [
+            r for r in historico
+            if r["tipo"] == "peso" and (parse_date(r["data"]) and data_inicio <= parse_date(r["data"]) <= data_fim)
+        ]
+
+        # Exibir relatório completo
+        exibir_relatorio(
+            consumo_filtrado,
+            atividades_filtrado,
+            peso_filtrado,
+            data_inicio,
+            data_fim,
+            incluir_consumo,
+            incluir_atividades
+        )
 
 # -----------------------------
-# FUNÇÃO PARA EXIBIR RELATÓRIO
+# Função para exibir relatório
 # -----------------------------
 def exibir_relatorio(consumo_filtrado, atividades_filtrado, peso_filtrado, data_inicio, data_fim,
                      incluir_consumo=True, incluir_atividades=True):
@@ -1745,7 +1763,6 @@ def exibir_relatorio(consumo_filtrado, atividades_filtrado, peso_filtrado, data_
                 except Exception:
                     continue
                 if data_inicio <= data_atividade <= data_fim:
-                    # Ajuste de nome do campo para o display
                     a_display = a.copy()
                     a_display["tipo_atividade"] = a.get("tipo", "—")
                     a_display["data"] = data_atividade
