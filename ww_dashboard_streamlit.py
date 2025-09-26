@@ -1225,93 +1225,100 @@ if st.session_state.menu == "dashboard":
         f"</div>", unsafe_allow_html=True
     )
 
-    # -----------------------------
-    # Gráficos principais
-    # -----------------------------
-    col1, col2, col3 = st.columns(3, gap="large")
-    graf_height = 430
+# -----------------------------
+# Gráficos principais
+# -----------------------------
+col1, col2, col3 = st.columns(3, gap="large")
+graf_height = 430
 
-    # Consumo Diário
-    with col1:
-        meta_diaria = st.session_state.meta_diaria or 1
-        consumo_diario_val = float(st.session_state.consumo_diario or 0.0)
-        fig1 = go.Figure(go.Indicator(
-            mode="gauge+number",
-            value=consumo_diario_val,
-            number={'suffix': f" / {meta_diaria}"},
-            gauge={'axis': {'range': [0, max(meta_diaria, 1)]},
-                   'bar': {'color': "#e74c3c"},
-                   'steps': [
-                       {'range': [0, meta_diaria * 0.7], 'color': "#2ecc71"},
-                       {'range': [meta_diaria * 0.7, meta_diaria], 'color': "#f1c40f"}
-                   ]},
-            title={'text': "Pontos Consumidos"}
-        ))
-        fig1.update_layout(height=graf_height)
-        st.plotly_chart(fig1, use_container_width=True)
+# Consumo Diário
+with col1:
+    meta_diaria = st.session_state.meta_diaria or 1
+    consumo_diario_val = float(st.session_state.consumo_diario or 0.0)
+    fig1 = go.Figure(go.Indicator(
+        mode="gauge+number",
+        value=consumo_diario_val,
+        number={'suffix': f" / {meta_diaria}"},
+        gauge={'axis': {'range': [0, max(meta_diaria, 1)]},
+               'bar': {'color': "#e74c3c"},
+               'steps': [
+                   {'range': [0, meta_diaria * 0.7], 'color': "#2ecc71"},
+                   {'range': [meta_diaria * 0.7, meta_diaria], 'color': "#f1c40f"}
+               ]},
+        title={'text': "Pontos Consumidos"}
+    ))
+    fig1.update_layout(height=graf_height)
+    st.plotly_chart(fig1, use_container_width=True)
 
-    # Pontos Extras
-    with col2:
-        # soma pontos de activities filtrando por semana atual (tratando keys str/date)
-        pontos_atividade_semana = 0.0
-        for k, lst in st.session_state.get("activities", {}).items():
-            d = parse_date(k)
-            if d and iso_week_number(d) == semana_atual:
-                for a in lst:
-                    pontos_atividade_semana += float(a.get("pontos", 0.0))
+# Pontos Extras
+with col2:
+    # soma pontos de activities filtrando por semana atual (tratando keys str/date)
+    pontos_atividade_semana = 0.0
+    for k, lst in st.session_state.get("activities", {}).items():
+        d = parse_date(k)
+        if d and iso_week_number(d) == semana_atual:
+            for a in lst:
+                pontos_atividade_semana += float(a.get("pontos", 0.0))
 
-        extras_disponiveis = float(semana_obj.get("extras", 36.0))
-        total_banco = max(0.0, extras_disponiveis + pontos_atividade_semana)
-        excesso_diario = max(0.0, st.session_state.consumo_diario - float(st.session_state.meta_diaria or 0))
+    extras_disponiveis = float(semana_obj.get("extras", 36.0))
+    total_banco = max(0.0, extras_disponiveis + pontos_atividade_semana)
+    excesso_diario = max(0.0, st.session_state.consumo_diario - float(st.session_state.meta_diaria or 0))
 
-        # evita div/zero no gauge quando total_banco == 0
-        max_range = total_banco if total_banco > 0 else 1.0
+    # evita div/zero no gauge quando total_banco == 0
+    max_range = total_banco if total_banco > 0 else 1.0
 
-        fig2 = go.Figure(go.Indicator(
-            mode="gauge+number",
-            value=excesso_diario,
-            number={'suffix': f" / {total_banco:.0f}"},
-            gauge={'axis': {'range': [0, max_range]},
-                   'bar': {'color': "#006400"},
-                   'steps': [
-                       {'range': [0, max_range/3], 'color': "#e74c3c"},
-                       {'range': [max_range/3, 2*max_range/3], 'color': "#f1c40f"},
-                       {'range': [2*max_range/3, max_range], 'color': "#2ecc71"}
-                   ]},
-            title={'text': "⭐ Pontos Extras (semana)"}
-        ))
-        fig2.update_layout(height=graf_height)
-        st.plotly_chart(fig2, use_container_width=True)
+    fig2 = go.Figure(go.Indicator(
+        mode="gauge+number",
+        value=excesso_diario,
+        number={'suffix': f" / {total_banco:.0f}"},
+        gauge={'axis': {'range': [0, max_range]},
+               'bar': {'color': "#006400"},
+               'steps': [
+                   {'range': [0, max_range/3], 'color': "#e74c3c"},
+                   {'range': [max_range/3, 2*max_range/3], 'color': "#f1c40f"},
+                   {'range': [2*max_range/3, max_range], 'color': "#2ecc71"}
+               ]},
+        title={'text': "⭐ Pontos Extras (semana)"}
+    ))
+    fig2.update_layout(height=graf_height)
+    st.plotly_chart(fig2, use_container_width=True)
 
-    # Peso Atual
-    with col3:
-        pesolist = st.session_state.get("peso", [0.0])
-        if len(pesolist) <= 1:
+# Peso Atual
+with col3:
+    pesolist = st.session_state.get("peso", [])
+
+    if not pesolist:  # se vazio, inicializa
+        pesolist = [0.0]
+
+    if len(pesolist) <= 1:
+        cor_gauge = "blue"
+        tendencia = "➖"
+    else:
+        if pesolist[-1] < pesolist[-2]:
+            cor_gauge = "green"
+            tendencia = "⬇️"
+        elif pesolist[-1] > pesolist[-2]:
+            cor_gauge = "orange"
+            tendencia = "⬆️"
+        else:
             cor_gauge = "blue"
             tendencia = "➖"
-        else:
-            if pesolist[-1] < pesolist[-2]:
-                cor_gauge = "green"
-                tendencia = "⬇️"
-            elif pesolist[-1] > pesolist[-2]:
-                cor_gauge = "orange"
-                tendencia = "⬆️"
-            else:
-                cor_gauge = "blue"
-                tendencia = "➖"
 
-        peso_atual = pesolist[-1] if pesolist else 0.0
-        min_axis = (min(pesolist) - 5) if pesolist else 0
-        max_axis = (max(pesolist) + 5) if pesolist else 100
-        fig_gauge = go.Figure(go.Indicator(
-            mode="gauge+number",
-            value=peso_atual,
-            gauge={'axis': {'range': [min_axis, max_axis]},
-                   'bar': {'color': cor_gauge}},
-            title={'text': f"Peso Atual {tendencia}"}
-        ))
-        fig_gauge.update_layout(height=graf_height)
-        st.plotly_chart(fig_gauge, use_container_width=True)
+    peso_atual = pesolist[-1]
+    min_axis = min(pesolist) - 5
+    max_axis = max(pesolist) + 5
+
+    fig_gauge = go.Figure(go.Indicator(
+        mode="gauge+number",
+        value=peso_atual,
+        number={'suffix': " kg"},
+        gauge={'axis': {'range': [min_axis, max_axis]},
+               'bar': {'color': cor_gauge}},
+        title={'text': f"Peso Atual {tendencia}"}
+    ))
+    fig_gauge.update_layout(height=graf_height)
+    st.plotly_chart(fig_gauge, use_container_width=True)
+
 
     # -----------------------------
     # FUNÇÃO PARA EXIBIR HISTÓRICOS NO DASHBOARD (AJUSTADA)
