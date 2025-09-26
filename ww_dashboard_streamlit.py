@@ -677,7 +677,7 @@ def importar_planilha():
             st.error(f"Erro ao importar planilha: {e}\n(Se for .xlsx, instale openpyxl: pip install openpyxl)")
 
 # -----------------------------
-# FUNÇÃO REGISTRAR CONSUMO (AJUSTADO)
+# FUNÇÃO REGISTRAR CONSUMO (REVISADA)
 # -----------------------------
 def registrar_consumo():
     st.header("🍴 Registrar Consumo")
@@ -698,9 +698,11 @@ def registrar_consumo():
     pontos_por_porcao = round_points(alimento.get("Pontos", 0.0))
     st.markdown(f"**Porção referência:** {porcao_ref} g — Pontos (por porção): **{pontos_por_porcao}**")
 
-    # Inicializa flag para histórico expandido
+    # Inicializa flags e listas
     if "mostrar_historico_consumo" not in st.session_state:
         st.session_state.mostrar_historico_consumo = False
+    if "consumo_historico" not in st.session_state:
+        st.session_state.consumo_historico = []
 
     # Formulário para registrar quantidade
     with st.form("form_reg_consumo", clear_on_submit=False):
@@ -714,60 +716,44 @@ def registrar_consumo():
         submitted = st.form_submit_button("Registrar consumo")
 
         if submitted:
-            if alimento.get("ZeroPontos", False):
-                pontos_registrados = 0
-            else:
-                pontos_raw = float(alimento.get("Pontos", 0.0)) * (quantidade / porcao_ref if porcao_ref > 0 else 0.0)
-                pontos_registrados = round_points(pontos_raw)
+            pontos_registrados = 0 if alimento.get("ZeroPontos", False) else round_points(
+                float(alimento.get("Pontos", 0.0)) * (quantidade / porcao_ref if porcao_ref > 0 else 0.0)
+            )
 
             registro = {
                 "tipo": "consumo",
-                "data": datetime.date.today().isoformat(),
+                "data": datetime.date.today(),
                 "nome": escolha,
                 "quantidade": float(quantidade),
                 "pontos": pontos_registrados,
                 "usou_extras": 0.0
             }
-            st.session_state.historico_acumulado.append(registro)
+            st.session_state.consumo_historico.append(registro)
 
+            # Recalcula pontos semanais e persiste
+            rebuild_pontos_semana_from_history()
             persist_all()
             st.success(
                 f"🍴 Registrado {quantidade:.2f}g de {escolha}. "
-                f"Pontos: {pontos_registrados:.2f}"
+                f"Pontos: {pontos_registrados:.2f}. Total hoje: {st.session_state.consumo_diario:.2f}"
             )
 
-            # ativa flag para exibir histórico
             st.session_state.mostrar_historico_consumo = True
-
-            # ⚡ Força atualização imediata da interface
             try:
                 rerun_streamlit()
             except Exception:
                 st.stop()
 
-    # -----------------------------
     # Histórico com opções de editar/excluir
-    # -----------------------------
-    historico = st.session_state.get("historico_acumulado", [])
-    consumos = [r for r in historico if r["tipo"] == "consumo"]
-
-    def parse_date(d):
-        if isinstance(d, datetime.date):
-            return d
-        try:
-            return datetime.date.fromisoformat(str(d))
-        except:
-            return None
-
     with st.expander("### Histórico de Consumo (últimos registros)", expanded=st.session_state.mostrar_historico_consumo):
-        if not consumos:
+        if not st.session_state.consumo_historico:
             st.info("Nenhum consumo registrado ainda.")
         else:
-            for idx, reg in enumerate(reversed(consumos)):
-                dia = parse_date(reg["data"])
-                dia_sem = weekday_name_br(dia) if dia else ""
-                data_str = dia.strftime("%d/%m/%Y") if dia else str(reg["data"])
-                display = f"{data_str} ({dia_sem}): {reg['nome']} — {reg['quantidade']:.2f} g — {reg['pontos']:.2f} pts"
+            for idx in range(len(st.session_state.consumo_historico) - 1, -1, -1):
+                reg = st.session_state.consumo_historico[idx]
+                data = reg["data"]
+                dia_sem = weekday_name_br(data) if isinstance(data, datetime.date) else ""
+                display = f"{data.strftime('%d/%m/%Y')} ({dia_sem}): {reg['nome']} — {reg['quantidade']:.2f} g — {reg['pontos']:.2f} pts"
                 if reg.get("usou_extras", 0.0):
                     display += f" — usou extras: {reg.get('usou_extras',0.0):.2f} pts"
 
@@ -784,24 +770,23 @@ def registrar_consumo():
                             value=reg["quantidade"], key=edit_key_q
                         )
                         alimento_ref = next((a for a in st.session_state.alimentos if a["Nome"] == reg["nome"]), None)
+                        new_p = reg["pontos"]
                         if alimento_ref:
                             porc_ref = float(alimento_ref.get("Porcao", 100.0))
-                            new_p_raw = float(alimento_ref.get("Pontos", 0.0)) * (new_q / porc_ref if porc_ref > 0 else 0.0)
-                            new_p = round_points(new_p_raw)
-                        else:
-                            new_p = reg["pontos"]
+                            new_p = round_points(float(alimento_ref.get("Pontos", 0.0)) * (new_q / porc_ref if porc_ref > 0 else 0.0))
 
                         if st.button("Salvar alterações", key=save_key):
                             reg["quantidade"] = float(new_q)
                             reg["pontos"] = new_p
+                            rebuild_pontos_semana_from_history()
                             persist_all()
                             st.success("Registro atualizado!")
                             rerun_streamlit()
 
                 # Excluir registro
                 if cols[2].button("Excluir", key=f"del_cons_{idx}"):
-                    consumos.remove(reg)
-                    st.session_state.historico_acumulado = [r for r in historico if r not in consumos]
+                    st.session_state.consumo_historico.pop(idx)
+                    rebuild_pontos_semana_from_history()
                     persist_all()
                     st.success("Registro excluído.")
                     rerun_streamlit()
@@ -1917,4 +1902,3 @@ elif st.session_state.menu == "📊 Históricos Acumulados":
 elif st.session_state.menu == "🚪 Sair":
     # logout já tratado no menu lateral
     pass
-
