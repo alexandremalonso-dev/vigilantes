@@ -1428,7 +1428,7 @@ if st.session_state.menu == "🏠 Dashboard":
         st.plotly_chart(fig_gauge, use_container_width=True)
 
 # -----------------------------
-# FUNÇÃO PARA EXIBIR HISTÓRICOS NO DASHBOARD
+# FUNÇÃO PARA EXIBIR HISTÓRICOS NO DASHBOARD (AJUSTADA)
 # -----------------------------
 def exibir_historicos_dashboard():
     col_hist1, col_hist2, col_hist3 = st.columns(3)
@@ -1479,12 +1479,27 @@ def exibir_historicos_dashboard():
                     with st.expander(f"Editar registro #{i}", expanded=True):
                         nova_qtd = st.number_input("Quantidade (g):", min_value=0.0, step=1.0, value=nova_qtd, key=edit_key_q)
 
+                        # ⚠ Botão Salvar alterações dentro do loop para que `i` exista
                         if st.button("Salvar alterações", key=f"save_edit_cons_dash_{i}"):
                             try:
                                 # Atualiza histórico de consumo
                                 st.session_state.consumo_historico[i]["nome"] = novo_nome
                                 st.session_state.consumo_historico[i]["quantidade"] = nova_qtd
                                 st.session_state.consumo_historico[i]["pontos"] = novos_pontos
+
+                                # Atualiza pontos_semana
+                                semana_atual = datetime.date.today().isocalendar()[1]
+                                semana_existente = next((s for s in st.session_state.pontos_semana if s["semana"] == semana_atual), None)
+                                if not semana_existente:
+                                    semana_existente = {"semana": semana_atual, "pontos": [], "extras": 36.0}
+                                    st.session_state.pontos_semana.append(semana_existente)
+                                semana_existente["pontos"].append({
+                                    "data": datetime.date.today(),
+                                    "nome": novo_nome,
+                                    "quantidade": nova_qtd,
+                                    "pontos": novos_pontos,
+                                    "usou_extras": 0.0
+                                })
 
                                 # Atualiza histórico acumulado
                                 add_to_historico({
@@ -1564,7 +1579,6 @@ def exibir_historicos_dashboard():
 # -----------------------------
 if st.session_state.menu == "🏠 Dashboard":
     exibir_historicos_dashboard()
-
 
     # -----------------------------
     # Tendência de Peso (linha)
