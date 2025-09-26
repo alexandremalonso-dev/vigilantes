@@ -1457,21 +1457,59 @@ def exibir_historicos_dashboard():
     # -----------------------------
     with col_hist1:
         st.markdown("### 📊 Pontos / Consumo Diário")
-
-        consumos = [r for r in historico if r["tipo"] == "consumo"]
+        consumos = [r for r in historico if r["tipo"] == "alimento"]
         consumos = [r for r in consumos if parse_date(r["data"]) == hoje]
 
         if consumos:
-            for reg in sorted(consumos, key=lambda x: parse_date(x["data"])):
+            for i, reg in enumerate(sorted(consumos, key=lambda x: parse_date(x["data"]))):
                 dia = parse_date(reg["data"])
                 dia_str = dia.strftime("%d/%m/%Y") if dia else str(reg["data"])
                 dia_sem = weekday_name_br(dia) if dia else ""
-                st.markdown(
-                    f"<div style='padding:10px; border:1px solid #f39c12; border-radius:5px; margin-bottom:5px;'>"
-                    f"{dia_str} ({dia_sem}): {reg['nome']} {reg.get('quantidade',0):.2f} g "
-                    f"<span style='color:#1f3c88'>({reg.get('pontos',0):.2f} pts)</span>"
-                    f"</div>", unsafe_allow_html=True
-                )
+                display_text = f"{dia_str} ({dia_sem}): {reg['nome']} {reg.get('quantidade',0):.2f} g ({reg.get('pontos',0):.2f} pts)"
+
+                cols = st.columns([6,1,1])
+                cols[0].write(display_text)
+
+                # Botão Editar
+                if cols[1].button("Editar", key=f"edit_cons_dash_{i}"):
+                    edit_key_q = f"edit_cons_q_{i}"
+                    novo_nome = reg["nome"]
+                    nova_qtd = reg["quantidade"]
+                    novos_pontos = reg["pontos"]
+                    with st.expander(f"Editar registro #{i}", expanded=True):
+                        nova_qtd = st.number_input("Quantidade (g):", min_value=0.0, step=1.0, value=nova_qtd, key=edit_key_q)
+
+                        if st.button("Salvar alterações", key=f"save_edit_cons_dash_{i}"):
+                            try:
+                                # Atualiza histórico de consumo
+                                st.session_state.consumo_historico[i]["nome"] = novo_nome
+                                st.session_state.consumo_historico[i]["quantidade"] = nova_qtd
+                                st.session_state.consumo_historico[i]["pontos"] = novos_pontos
+
+                                # Atualiza histórico acumulado
+                                add_to_historico({
+                                    "data": datetime.date.today(),
+                                    "tipo": "alimento",
+                                    "nome": novo_nome,
+                                    "quantidade": nova_qtd,
+                                    "pontos": novos_pontos,
+                                    "usou_extras": 0.0
+                                })
+
+                                persist_all()
+                                st.success("Consumo atualizado com sucesso!")
+                                st.experimental_rerun()
+                            except Exception as e:
+                                st.error(f"Erro ao salvar alterações: {e}")
+
+                # Botão Excluir
+                if cols[2].button("❌", key=f"del_cons_dash_{i}"):
+                    st.session_state.consumo_historico.pop(i)
+                    rebuild_pontos_semana_from_history()  # atualiza extras
+                    persist_all()
+                    st.success("Registro excluído.")
+                    st.experimental_rerun()
+
         else:
             st.write(" - (sem registros hoje)")
 
