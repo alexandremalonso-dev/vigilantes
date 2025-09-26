@@ -1616,7 +1616,7 @@ def registrar_atividade_fisica():
 
 
 # -----------------------------
-# Página Históricos Acumulados Revisada
+# Página Históricos Acumulados (corrigida)
 # -----------------------------
 import streamlit as st
 import datetime
@@ -1625,7 +1625,7 @@ import base64
 # -----------------------------
 # Função para gerar HTML do relatório (para download)
 # -----------------------------
-def gerar_html_relatorio(consumo_filtrado, atividades_filtrado, peso_filtrado, pontos_semanais, data_inicio, data_fim, incluir_consumo=True, incluir_atividades=True):
+def gerar_html_relatorio(consumo_filtrado, atividades_filtrado, peso_filtrado, pontos_semana, data_inicio, data_fim, incluir_consumo=True, incluir_atividades=True):
     def parse_date(d):
         if isinstance(d, datetime.date):
             return d
@@ -1650,12 +1650,13 @@ def gerar_html_relatorio(consumo_filtrado, atividades_filtrado, peso_filtrado, p
     html += f"<h1>Histórico Acumulado - Vigilantes do Peso</h1>"
     html += f"<p>Período: {data_inicio.strftime('%d/%m/%Y')} → {data_fim.strftime('%d/%m/%Y')}</p>"
 
-    # Pontos Semanais Extras
-    html += "<h2>Pontos Semanais Extras</h2><table><tr><th>Semana</th><th>Data</th><th>Nome</th><th>Quantidade</th><th>Pontos</th><th>Extras usados</th></tr>"
-    for r in pontos_semanais:
-        r_data = parse_date(r["data"])
-        if r_data and data_inicio <= r_data <= data_fim:
-            html += f"<tr><td>{r.get('semana','-')}</td><td>{r_data.strftime('%d/%m/%Y')}</td><td>{r['nome']}</td><td>{format_num(r.get('quantidade',0))}</td><td>{format_num(r.get('pontos',0))}</td><td>{format_num(r.get('usou_extras',0))}</td></tr>"
+    # Pontos Semanais
+    html += "<h2>Pontos Semanais</h2><table><tr><th>Semana</th><th>Data</th><th>Nome</th><th>Quantidade</th><th>Pontos</th><th>Extras usados</th></tr>"
+    for w in pontos_semana:
+        for r in w.get("pontos", []):
+            r_data = parse_date(r["data"])
+            if r_data and data_inicio <= r_data <= data_fim:
+                html += f"<tr><td>{w['semana']}</td><td>{r_data.strftime('%d/%m/%Y')}</td><td>{r['nome']}</td><td>{format_num(r.get('quantidade',0))}</td><td>{format_num(r.get('pontos',0))}</td><td>{format_num(r.get('usou_extras',0))}</td></tr>"
     html += "</table>"
 
     # Consumo Diário
@@ -1702,6 +1703,7 @@ def botao_download_html(html_content):
 def historico_acumulado_page():
     st.header("📅 Seleção de Período para Histórico Acumulado")
 
+    # Inicializar sessão caso não exista
     if "pontos_semana" not in st.session_state:
         st.session_state.pontos_semana = []
 
@@ -1731,20 +1733,10 @@ def historico_acumulado_page():
         atividades_filtrado = [r for r in historico if r["tipo"]=="atividade" and parse_date(r["data"]) and data_inicio <= parse_date(r["data"]) <= data_fim]
         peso_filtrado = [r for r in historico if r["tipo"]=="peso" and parse_date(r["data"]) and data_inicio <= parse_date(r["data"]) <= data_fim]
 
-        # 🔹 Pontos Extras: combinar consumo diário e pontos semanais
-        pontos_semanais = [r for r in consumo_filtrado if r.get("usou_extras",0) > 0]
-        for semana in st.session_state.get("pontos_semana", []):
-            for r in semana.get("pontos", []):
-                if r.get("usou_extras",0) > 0:
-                    r_copy = r.copy()
-                    r_copy["tipo"] = "consumo"
-                    pontos_semanais.append(r_copy)
-
         exibir_relatorio(
             consumo_filtrado=consumo_filtrado,
-            atividades_filtrado=atividades_filtrado,
+            historico_acumulado=historico,
             peso_filtrado=peso_filtrado,
-            pontos_semanais=pontos_semanais,
             data_inicio=data_inicio,
             data_fim=data_fim,
             incluir_consumo=incluir_consumo,
@@ -1754,11 +1746,89 @@ def historico_acumulado_page():
 # -----------------------------
 # Função para exibir relatório
 # -----------------------------
-def exibir_relatorio(consumo_filtrado, atividades_filtrado, peso_filtrado, pontos_semanais, data_inicio, data_fim,
+def exibir_relatorio(consumo_filtrado, historico_acumulado, peso_filtrado, data_inicio, data_fim,
                      incluir_consumo=True, incluir_atividades=True):
+
+    def parse_date(d):
+        if isinstance(d, datetime.date):
+            return d
+        try:
+            return datetime.date.fromisoformat(str(d))
+        except:
+            return None
+
+    def format_num(n):
+        return "{:,.2f}".format(n).replace(".", ",")
+
+    # Atividades filtradas do histórico
+    atividades_filtrado_local = []
+    if incluir_atividades:
+        for r in historico_acumulado:
+            if r["tipo"]=="atividade":
+                r_data = parse_date(r["data"])
+                if r_data and data_inicio <= r_data <= data_fim:
+                    a_display = r.copy()
+                    a_display["tipo_atividade"] = r.get("tipo_atividade", r.get("tipo","—"))
+                    a_display["data"] = r_data
+                    atividades_filtrado_local.append(a_display)
+
+    # -----------------------------
+    # Consumo Diário
+    if incluir_consumo and consumo_filtrado:
+        st.markdown("### Consumo Diário")
+        st.table([{
+            "Data": parse_date(r["data"]).strftime("%d/%m/%Y"),
+            "Alimento": r["nome"],
+            "Quantidade (g)": format_num(r["quantidade"]),
+            "Pontos": format_num(r["pontos"]),
+            "Extras usados": format_num(r.get("usou_extras",0))
+        } for r in consumo_filtrado])
+
+    # -----------------------------
+    # Atividades Físicas
+    if incluir_atividades and atividades_filtrado_local:
+        st.markdown("### Atividades Físicas")
+        st.table([{
+            "Data": r["data"].strftime("%d/%m/%Y"),
+            "Atividade": r["tipo_atividade"],
+            "Minutos": format_num(r.get("minutos",0)),
+            "Pontos": format_num(r.get("pontos",0))
+        } for r in atividades_filtrado_local])
+
+    # -----------------------------
+    # Peso
+    if peso_filtrado:
+        st.markdown("### Peso")
+        st.table([{
+            "Data": parse_date(r["data"]).strftime("%d/%m/%Y"),
+            "Peso (kg)": format_num(r["valor"])
+        } for r in peso_filtrado])
+
+    # -----------------------------
+    # Pontos Semanais Extras
+    pontos_semanais = [r for r in consumo_filtrado if r.get("usou_extras",0) > 0]
+    for semana in st.session_state.pontos_semana:
+        for r in semana.get("pontos", []):
+            if r.get("usou_extras",0) > 0:
+                r_copy = r.copy()
+                r_copy["tipo"] = "consumo"
+                pontos_semanais.append(r_copy)
+
+    if pontos_semanais:
+        st.markdown("### Pontos Semanais Extras")
+        st.table([{
+            "Data": parse_date(r["data"]).strftime("%d/%m/%Y"),
+            "Nome": r["nome"],
+            "Quantidade": format_num(r.get("quantidade",0)),
+            "Pontos": format_num(r.get("pontos",0)),
+            "Extras usados": format_num(r.get("usou_extras",0))
+        } for r in pontos_semanais])
+
+    # -----------------------------
+    # Botão verde para baixar HTML
     html_relatorio = gerar_html_relatorio(
         consumo_filtrado,
-        atividades_filtrado,
+        atividades_filtrado_local,
         peso_filtrado,
         pontos_semanais,
         data_inicio,
@@ -1767,51 +1837,6 @@ def exibir_relatorio(consumo_filtrado, atividades_filtrado, peso_filtrado, ponto
         incluir_atividades
     )
     botao_download_html(html_relatorio)
-
-    # Exibir no Streamlit como tabela resumida também
-    import pandas as pd
-    def format_num(n):
-        return "{:,.2f}".format(n).replace(".", ",")
-
-    if incluir_consumo and consumo_filtrado:
-        df_c = pd.DataFrame([{
-            "Data": r["data"].strftime("%d/%m/%Y"),
-            "Alimento": r["nome"],
-            "Quantidade (g)": format_num(r["quantidade"]),
-            "Pontos": format_num(r["pontos"]),
-            "Extras usados": format_num(r.get("usou_extras",0))
-        } for r in consumo_filtrado])
-        st.markdown("### Consumo Diário")
-        st.dataframe(df_c)
-
-    if incluir_atividades and atividades_filtrado:
-        df_a = pd.DataFrame([{
-            "Data": r["data"].strftime("%d/%m/%Y"),
-            "Atividade": r.get("tipo_atividade", r.get("tipo","—")),
-            "Minutos": format_num(r.get("minutos",0)),
-            "Pontos": format_num(r.get("pontos",0))
-        } for r in atividades_filtrado])
-        st.markdown("### Atividades Físicas")
-        st.dataframe(df_a)
-
-    if pontos_semanais:
-        df_e = pd.DataFrame([{
-            "Data": r["data"].strftime("%d/%m/%Y"),
-            "Nome": r["nome"],
-            "Quantidade": format_num(r.get("quantidade",0)),
-            "Pontos": format_num(r.get("pontos",0)),
-            "Extras usados": format_num(r.get("usou_extras",0))
-        } for r in pontos_semanais])
-        st.markdown("### Pontos Semanais Extras")
-        st.dataframe(df_e)
-
-    if peso_filtrado:
-        df_p = pd.DataFrame([{
-            "Data": r["data"].strftime("%d/%m/%Y"),
-            "Peso (kg)": format_num(r["valor"])
-        } for r in peso_filtrado])
-        st.markdown("### Peso")
-        st.dataframe(df_p)
 
 # -----------------------------
 # CÁLCULO META DIÁRIA WW
