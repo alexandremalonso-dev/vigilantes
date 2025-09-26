@@ -1414,13 +1414,29 @@ def exibir_historicos_dashboard():
         except:
             return None
 
+    # -----------------------------
     # Pontos Semanais Extras
+    # -----------------------------
     with col_hist1:
         st.markdown("### 📊 Pontos Semanais")
-        consumos = [
+        
+        # Combina histórico acumulado e pontos semanais
+        consumos = []
+
+        # Do histórico acumulado
+        consumos.extend([
             r for r in historico
             if r["tipo"] == "consumo" and r.get("usou_extras", 0) > 0
-        ]
+        ])
+
+        # Dos pontos semanais (somente extras usados > 0)
+        for semana in st.session_state.pontos_semana:
+            for reg in semana.get("pontos", []):
+                if reg.get("usou_extras", 0) > 0:
+                    reg_copy = reg.copy()
+                    reg_copy["tipo"] = "consumo"  # garante compatibilidade
+                    consumos.append(reg_copy)
+
         if consumos:
             for reg in sorted(consumos, key=lambda x: parse_date(x["data"])):
                 dia = parse_date(reg["data"])
@@ -1428,14 +1444,16 @@ def exibir_historicos_dashboard():
                 dia_sem = weekday_name_br(dia) if dia else ""
                 st.markdown(
                     f"<div style='padding:10px; border:1px solid #f39c12; border-radius:5px; margin-bottom:5px;'>"
-                    f"{dia_str} ({dia_sem}): {reg['nome']} {reg['quantidade']:.2f} g <span style='color:#1f3c88'>({reg['pontos']:.2f} pts)</span>"
-                    f" - usou extras: ({reg.get('usou_extras',0.0):.2f} pts)"
+                    f"{dia_str} ({dia_sem}): {reg['nome']} {reg.get('quantidade',0):.2f} g <span style='color:#1f3c88'>({reg.get('pontos',0):.2f} pts)</span>"
+                    f" - usou extras: ({reg.get('usou_extras',0):.2f} pts)"
                     f"</div>", unsafe_allow_html=True
                 )
         else:
             st.write(" - (sem registros)")
 
+    # -----------------------------
     # Histórico de Atividades
+    # -----------------------------
     with col_hist2:
         st.markdown("### 🏃 Histórico de Atividades Físicas")
         acts = [r for r in historico if r["tipo"] == "atividade"]
@@ -1446,13 +1464,15 @@ def exibir_historicos_dashboard():
                 dia_sem = weekday_name_br(dia) if dia else ""
                 st.markdown(
                     f"<div style='padding:10px; border:1px solid #1abc9c; border-radius:5px; margin-bottom:5px;'>"
-                    f"{dia_str} ({dia_sem}): {reg['tipo_atividade']} - {reg['minutos']:.2f} min <span style='color:#1f3c88'>({reg['pontos']:.2f} pts)</span>"
+                    f"{dia_str} ({dia_sem}): {reg['tipo_atividade']} - {reg.get('minutos',0):.2f} min <span style='color:#1f3c88'>({reg.get('pontos',0):.2f} pts)</span>"
                     f"</div>", unsafe_allow_html=True
                 )
         else:
             st.info("Nenhuma atividade registrada ainda.")
 
+    # -----------------------------
     # Histórico de Peso
+    # -----------------------------
     with col_hist3:
         st.markdown("### ⚖️ Histórico de Peso")
         pesos = [r for r in historico if r["tipo"] == "peso"]
@@ -1897,3 +1917,4 @@ elif st.session_state.menu == "📊 Históricos Acumulados":
 elif st.session_state.menu == "🚪 Sair":
     # logout já tratado no menu lateral
     pass
+
