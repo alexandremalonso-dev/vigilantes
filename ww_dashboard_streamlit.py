@@ -1626,7 +1626,7 @@ def botao_download_html(html_content):
     )
 
 # -----------------------------
-# Página Históricos Acumulados
+# Página Históricos Acumulados (AJUSTADA COM FORMATAÇÃO BR)
 # -----------------------------
 def historico_acumulado_page():
     st.header("📅 Seleção de Período para Histórico Acumulado")
@@ -1643,7 +1643,7 @@ def historico_acumulado_page():
 
     historico = st.session_state.get("historico_acumulado", [])
 
-    # Filtrar registros a partir do histórico acumulado
+    # Filtrar registros
     consumo_filtrado = [
         r for r in historico
         if r.get("tipo") == "consumo" and data_inicio <= parse_date(r["data"]) <= data_fim
@@ -1660,24 +1660,48 @@ def historico_acumulado_page():
         if r.get("tipo") == "peso" and data_inicio <= parse_date(r["data"]) <= data_fim
     ]
 
-    # Reconstruir pontos semanais antes de exibir
+    # Reconstruir pontos semanais
     rebuild_pontos_semana_from_history()
     pontos_semana = st.session_state.get("pontos_semana", [])
 
-    # Exibir relatório na tela
+    # Exibir relatório
     st.subheader("📊 Relatório")
+
     if incluir_consumo and consumo_filtrado:
         st.markdown("### Consumo Diário")
-        st.table([{ "Data": r["data"].strftime("%d/%m/%Y"), "Alimento": r["nome"], "Quantidade (g)": r["quantidade"], "Pontos": r["pontos"], "Extras usados": r.get("usou_extras",0) } for r in consumo_filtrado])
+        st.table([
+            {
+                "Data": parse_date(r["data"]).strftime("%d/%m/%Y"),
+                "Alimento": r["nome"],
+                "Quantidade (g)": f"{r['quantidade']:.2f}".replace(".", ","),
+                "Pontos": f"{r['pontos']:.2f}".replace(".", ","),
+                "Extras usados": f"{r.get('usou_extras',0):.2f}".replace(".", ",")
+            }
+            for r in consumo_filtrado
+        ])
 
     if incluir_atividades and atividades_filtrado:
         st.markdown("### Atividades Físicas")
         for d,lst in sorted(atividades_filtrado.items()):
-            st.table([{ "Data": d.strftime("%d/%m/%Y"), "Atividade": a["nome"], "Minutos": a["quantidade"], "Pontos": a["pontos"] } for a in lst])
+            st.table([
+                {
+                    "Data": d.strftime("%d/%m/%Y"),
+                    "Atividade": a["nome"],
+                    "Minutos": f"{a['quantidade']:.2f}".replace(".", ","),
+                    "Pontos": f"{a['pontos']:.2f}".replace(".", ",")
+                }
+                for a in lst
+            ])
 
     if peso_filtrado:
         st.markdown("### Peso")
-        st.table([{ "Data": d.strftime("%d/%m/%Y"), "Peso (kg)": p } for p,d in peso_filtrado])
+        st.table([
+            {
+                "Data": d.strftime("%d/%m/%Y"),
+                "Peso (kg)": f"{p:.2f}".replace(".", ",")
+            }
+            for p,d in peso_filtrado
+        ])
 
     if pontos_semana:
         st.markdown("### Pontos Semanais")
@@ -1686,15 +1710,29 @@ def historico_acumulado_page():
             for r in w.get("pontos", []):
                 r_data = parse_date(r["data"])
                 if r_data and data_inicio <= r_data <= data_fim:
-                    all_points.append({ "Semana": w["semana"], "Data": r_data.strftime("%d/%m/%Y"), "Nome": r["nome"], "Quantidade": r["quantidade"], "Pontos": r["pontos"], "Extras usados": r.get("usou_extras",0) })
+                    all_points.append({
+                        "Semana": w["semana"],
+                        "Data": r_data.strftime("%d/%m/%Y"),
+                        "Nome": r["nome"],
+                        "Quantidade": f"{r['quantidade']:.2f}".replace(".", ","),
+                        "Pontos": f"{r['pontos']:.2f}".replace(".", ","),
+                        "Extras usados": f"{r.get('usou_extras',0):.2f}".replace(".", ",")
+                    })
         if all_points:
             st.table(all_points)
 
-    # Botão verde para baixar HTML
-    html_relatorio = gerar_html_relatorio(consumo_filtrado, atividades_filtrado, peso_filtrado, pontos_semana, data_inicio, data_fim, incluir_consumo, incluir_atividades)
+    # Botão para baixar HTML (também ajusta formatação internamente se necessário)
+    html_relatorio = gerar_html_relatorio(
+        consumo_filtrado, atividades_filtrado, peso_filtrado,
+        pontos_semana, data_inicio, data_fim,
+        incluir_consumo, incluir_atividades
+    )
     botao_download_html(html_relatorio)
 
 
+# -----------------------------
+# Recalcular Meta diária
+# -----------------------------
 def calcular_meta_diaria(peso, altura, idade, sexo, objetivo, nivel_atividade):
     """
     Calcula meta diária de pontos WW SmartPoints.
