@@ -863,51 +863,55 @@ def registrar_peso():
                     rerun_streamlit()
 
 # -----------------------------
-# Relatório de variáveis do perfil
+# Relatório de variáveis do perfil (apenas no Dashboard)
 # -----------------------------
-st.subheader("📋 Relatório do Perfil")
-st.write(f"**Sexo:** {st.session_state.sexo}")
-st.write(f"**Idade:** {st.session_state.idade} anos")
-st.write(f"**Altura:** {st.session_state.altura:.2f} m")
-st.write(f"**Objetivo:** {st.session_state.objetivo}")
-st.write(f"**Nível de atividade:** {st.session_state.nivel_atividade}")
-st.write(f"**Meta diária:** {st.session_state.meta_diaria} pontos")
+if st.session_state.menu == "🏠 Dashboard":
+    st.subheader("📋 Relatório do Perfil")
+    st.write(f"**Sexo:** {st.session_state.sexo}")
+    st.write(f"**Idade:** {st.session_state.idade} anos")
+    st.write(f"**Altura:** {st.session_state.altura:.2f} m")
+    st.write(f"**Objetivo:** {st.session_state.objetivo}")
+    st.write(f"**Nível de atividade:** {st.session_state.nivel_atividade}")
+    st.write(f"**Meta diária:** {st.session_state.meta_diaria} pontos")
 
-# Botão para editar perfil diretamente
-with st.expander("✏️ Editar Perfil"):
-    sexo = st.selectbox(
-        "Sexo", 
-        ["feminino", "masculino"], 
-        index=0 if st.session_state.sexo.lower() == "feminino" else 1
-    )
-    idade = st.number_input(
-        "Idade:", min_value=10, max_value=120, step=1, value=st.session_state.idade
-    )
-    altura = st.number_input(
-        "Altura (m):", min_value=1.0, max_value=2.5, step=0.01, value=st.session_state.altura
-    )
-    objetivo = st.selectbox(
-        "Objetivo", 
-        ["emagrecimento", "manutenção", "ganho"], 
-        index=["emagrecimento","manutenção","ganho"].index(st.session_state.objetivo)
-    )
-    nivel_atividade = st.selectbox(
-        "Nível de atividade", 
-        ["sedentário", "moderado", "intenso"], 
-        index=["sedentário","moderado","intenso"].index(st.session_state.nivel_atividade)
-    )
+    # Botão para editar perfil diretamente
+    with st.expander("✏️ Editar Perfil"):
+        sexo = st.selectbox(
+            "Sexo", 
+            ["feminino", "masculino"], 
+            index=0 if st.session_state.sexo.lower() == "feminino" else 1
+        )
+        idade = st.number_input(
+            "Idade:", min_value=10, max_value=120, step=1, value=st.session_state.idade
+        )
+        altura = st.number_input(
+            "Altura (m):", min_value=1.0, max_value=2.5, step=0.01, value=st.session_state.altura
+        )
+        objetivo = st.selectbox(
+            "Objetivo", 
+            ["emagrecimento", "manutenção", "ganho"], 
+            index=["emagrecimento","manutenção","ganho"].index(st.session_state.objetivo)
+        )
+        nivel_atividade = st.selectbox(
+            "Nível de atividade", 
+            ["sedentário", "moderado", "intenso"], 
+            index=["sedentário","moderado","intenso"].index(st.session_state.nivel_atividade)
+        )
 
-    if st.button("Salvar Perfil", key="salvar_perfil_inline"):
-        st.session_state.sexo = sexo
-        st.session_state.idade = idade
-        st.session_state.altura = altura
-        st.session_state.objetivo = objetivo
-        st.session_state.nivel_atividade = nivel_atividade
+        if st.button("Salvar Perfil", key="salvar_perfil_inline"):
+            st.session_state.sexo = sexo
+            st.session_state.idade = idade
+            st.session_state.altura = altura
+            st.session_state.objetivo = objetivo
+            st.session_state.nivel_atividade = nivel_atividade
 
-        # Recalcula meta diária usando o último peso registrado no histórico acumulado
-        historico_peso = [r for r in st.session_state.historico_acumulado if r.get("tipo") == "peso"]
-        if historico_peso:
-            ultimo_peso = historico_peso[-1]["quantidade"]
+            # Recalcula meta diária usando o último peso registrado no histórico acumulado
+            historico_peso = [r for r in st.session_state.historico_acumulado if r.get("tipo") == "peso"]
+            if historico_peso:
+                ultimo_peso = historico_peso[-1]["quantidade"]
+            else:
+                ultimo_peso = st.session_state.peso[-1] if st.session_state.peso else 70.0  # fallback seguro
+
             st.session_state.meta_diaria = calcular_meta_diaria(
                 sexo=st.session_state.sexo,
                 idade=st.session_state.idade,
@@ -917,9 +921,9 @@ with st.expander("✏️ Editar Perfil"):
                 nivel_atividade=st.session_state.nivel_atividade
             )
 
-        persist_all()
-        st.success("Perfil atualizado com sucesso!")
-        rerun_streamlit()
+            persist_all()
+            st.success("Perfil atualizado com sucesso!")
+            rerun_streamlit()
 
 # -----------------------------
 # Funções utilitárias e inicialização de alimentos
