@@ -1346,7 +1346,7 @@ if st.session_state.menu == "🏠 Dashboard":
         st.plotly_chart(fig_gauge, use_container_width=True)
 
 # -----------------------------
-# FUNÇÃO PARA EXIBIR HISTÓRICOS NO DASHBOARD
+# FUNÇÃO PARA EXIBIR HISTÓRICOS NO DASHBOARD (AJUSTADA)
 # -----------------------------
 def exibir_historicos_dashboard():
     col_hist1, col_hist2, col_hist3 = st.columns(3)
@@ -1356,51 +1356,37 @@ def exibir_historicos_dashboard():
         if isinstance(d, datetime.date):
             return d
         try:
-            return datetime.date.fromisoformat(str(d))
+            return datetime.date.fromisoformat(d)
         except:
             return None
-
-    hoje = datetime.date.today()
-    semana_atual = hoje.isocalendar()[1]
-    ano_atual = hoje.isocalendar()[0]
-
-    def mesma_semana(dt):
-        if not dt:
-            return False
-        iso = dt.isocalendar()
-        return iso[0] == ano_atual and iso[1] == semana_atual
 
     # -----------------------------
     # Pontos / Consumo Diário
     # -----------------------------
     with col_hist1:
         st.markdown("### 📊 Pontos / Consumo Diário")
-
-        consumos = [r for r in historico if r["tipo"] == "consumo"]
-        consumos = [r for r in consumos if parse_date(r["data"]) == hoje]
-
-        if consumos:
-            for reg in sorted(consumos, key=lambda x: parse_date(x["data"])):
+        pontos_reg = [r for r in historico if r.get("tipo") == "consumo" and mesma_semana(parse_date(r["data"]))]
+        if pontos_reg:
+            for reg in sorted(pontos_reg, key=lambda x: parse_date(x["data"])):
                 dia = parse_date(reg["data"])
                 dia_str = dia.strftime("%d/%m/%Y") if dia else str(reg["data"])
                 dia_sem = weekday_name_br(dia) if dia else ""
+                usados_txt = f" - usou extras: ({reg.get('usou_extras',0.0):.2f} pts)" if reg.get("usou_extras",0.0) else ""
                 st.markdown(
                     f"<div style='padding:10px; border:1px solid #f39c12; border-radius:5px; margin-bottom:5px;'>"
-                    f"{dia_str} ({dia_sem}): {reg['nome']} {reg.get('quantidade',0):.2f} g "
-                    f"<span style='color:#1f3c88'>({reg.get('pontos',0):.2f} pts)</span>"
+                    f"{dia_str} ({dia_sem}): {reg['nome']} {reg['quantidade']:.2f} g "
+                    f"<span style='color:#1f3c88'>({reg['pontos']:.2f} pts)</span>{usados_txt}"
                     f"</div>", unsafe_allow_html=True
                 )
         else:
-            st.write(" - (sem registros hoje)")
+            st.write(" - (sem registros)")
 
     # -----------------------------
     # Histórico de Atividades
     # -----------------------------
     with col_hist2:
         st.markdown("### 🏃 Histórico de Atividades Físicas")
-        acts = [r for r in historico if r["tipo"] == "atividade"]
-        acts = [r for r in acts if mesma_semana(parse_date(r["data"]))]
-
+        acts = [r for r in historico if r.get("tipo") == "atividade" and mesma_semana(parse_date(r["data"]))]
         if acts:
             for reg in sorted(acts, key=lambda x: parse_date(x["data"])):
                 dia = parse_date(reg["data"])
@@ -1420,9 +1406,7 @@ def exibir_historicos_dashboard():
     # -----------------------------
     with col_hist3:
         st.markdown("### ⚖️ Histórico de Peso")
-        pesos = [r for r in historico if r["tipo"] == "peso"]
-        pesos = [r for r in pesos if mesma_semana(parse_date(r["data"]))]
-
+        pesos = [r for r in historico if r.get("tipo") == "peso" and mesma_semana(parse_date(r["data"]))]
         for i, reg in enumerate(pesos):
             dia = parse_date(reg["data"])
             tendencia = "➖"
