@@ -1401,24 +1401,24 @@ def exibir_historicos_dashboard():
         except:
             return None
 
+    hoje = datetime.date.today()
+    semana_atual = hoje.isocalendar()[1]
+    ano_atual = hoje.isocalendar()[0]
+
+    def mesma_semana(dt):
+        if not dt:
+            return False
+        iso = dt.isocalendar()
+        return iso[0] == ano_atual and iso[1] == semana_atual
+
     # -----------------------------
-    # Pontos Semanais / Histórico de Consumo
+    # Pontos / Consumo Diário
     # -----------------------------
     with col_hist1:
-        st.markdown("### 📊 Pontos  / Consumo Diário")
-        
-        # Pega todos os registros de consumo do histórico acumulado
-        consumos = [r for r in historico if r["tipo"] == "consumo"]
+        st.markdown("### 📊 Pontos / Consumo Diário")
 
-        # Inclui também registros da semana atual (pontos_semana) sem duplicar
-        for semana in st.session_state.pontos_semana:
-            for reg in semana.get("pontos", []):
-                reg_copy = reg.copy()
-                reg_copy["tipo"] = "consumo"
-                if not any(
-                    r["data"] == reg_copy["data"] and r["nome"] == reg_copy["nome"] for r in consumos
-                ):
-                    consumos.append(reg_copy)
+        consumos = [r for r in historico if r["tipo"] == "consumo"]
+        consumos = [r for r in consumos if parse_date(r["data"]) == hoje]
 
         if consumos:
             for reg in sorted(consumos, key=lambda x: parse_date(x["data"])):
@@ -1429,11 +1429,10 @@ def exibir_historicos_dashboard():
                     f"<div style='padding:10px; border:1px solid #f39c12; border-radius:5px; margin-bottom:5px;'>"
                     f"{dia_str} ({dia_sem}): {reg['nome']} {reg.get('quantidade',0):.2f} g "
                     f"<span style='color:#1f3c88'>({reg.get('pontos',0):.2f} pts)</span>"
-                    f" — usou extras: ({reg.get('usou_extras',0):.2f} pts)"
                     f"</div>", unsafe_allow_html=True
                 )
         else:
-            st.write(" - (sem registros)")
+            st.write(" - (sem registros hoje)")
 
     # -----------------------------
     # Histórico de Atividades
@@ -1441,6 +1440,8 @@ def exibir_historicos_dashboard():
     with col_hist2:
         st.markdown("### 🏃 Histórico de Atividades Físicas")
         acts = [r for r in historico if r["tipo"] == "atividade"]
+        acts = [r for r in acts if mesma_semana(parse_date(r["data"]))]
+
         if acts:
             for reg in sorted(acts, key=lambda x: parse_date(x["data"])):
                 dia = parse_date(reg["data"])
@@ -1453,7 +1454,7 @@ def exibir_historicos_dashboard():
                     f"</div>", unsafe_allow_html=True
                 )
         else:
-            st.info("Nenhuma atividade registrada ainda.")
+            st.info("Nenhuma atividade registrada nesta semana.")
 
     # -----------------------------
     # Histórico de Peso
@@ -1461,6 +1462,8 @@ def exibir_historicos_dashboard():
     with col_hist3:
         st.markdown("### ⚖️ Histórico de Peso")
         pesos = [r for r in historico if r["tipo"] == "peso"]
+        pesos = [r for r in pesos if mesma_semana(parse_date(r["data"]))]
+
         for i, reg in enumerate(pesos):
             dia = parse_date(reg["data"])
             tendencia = "➖"
