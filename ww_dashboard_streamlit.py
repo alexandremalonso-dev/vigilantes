@@ -784,6 +784,9 @@ def registrar_peso():
 
         if submitted:
             # Adiciona registro ao histórico acumulado
+            if "historico_acumulado" not in st.session_state:
+                st.session_state.historico_acumulado = []
+
             registro = {
                 "tipo": "peso",
                 "data": datetime.date.today(),
@@ -792,7 +795,7 @@ def registrar_peso():
                 "pontos": 0,  # peso não gera pontos
                 "usou_extras": 0.0
             }
-            add_to_historico(registro)
+            st.session_state.historico_acumulado.append(registro)
 
             # Atualiza meta diária automaticamente
             st.session_state.meta_diaria = calcular_meta_diaria(
