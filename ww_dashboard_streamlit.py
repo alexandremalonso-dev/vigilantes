@@ -1408,43 +1408,44 @@ if st.session_state.menu == "🏠 Dashboard":
     exibir_historicos_dashboard()
 
 # -----------------------------
-# Tendência de Peso (linha) - ajustado para histórico acumulado
+# Tendência de Peso (linha) - exclusivo do Dashboard
 # -----------------------------
-historico_peso = [r for r in st.session_state.historico_acumulado if r.get("tipo") == "peso"]
-if historico_peso:
-    # Ordena por data
-    historico_peso_sorted = sorted(historico_peso, key=lambda x: parse_date(x.get("data")))
-    datas = [parse_date(r.get("data")) for r in historico_peso_sorted]
-    pesos = [r.get("quantidade", 0.0) for r in historico_peso_sorted]
+if st.session_state.menu == "dashboard":
+    historico_peso = [r for r in st.session_state.historico_acumulado if r.get("tipo") == "peso"]
+    if historico_peso:
+        # Ordena por data
+        historico_peso_sorted = sorted(historico_peso, key=lambda x: parse_date(x.get("data")))
+        datas = [parse_date(r.get("data")) for r in historico_peso_sorted]
+        pesos = [r.get("quantidade", 0.0) for r in historico_peso_sorted]
 
-    df_peso = pd.DataFrame({"Data": datas, "Peso": pesos})
-    df_peso["Data_dt"] = pd.to_datetime(df_peso["Data"])
+        df_peso = pd.DataFrame({"Data": datas, "Peso": pesos})
+        df_peso["Data_dt"] = pd.to_datetime(df_peso["Data"])
 
-    if len(df_peso) >= 2:
-        x_ord = np.array([d.toordinal() for d in df_peso["Data_dt"]])
-        y = np.array(df_peso["Peso"])
-        m, b = np.polyfit(x_ord, y, 1)
-        y_trend = m*x_ord + b
-        mode_plot = "lines+markers"
+        if len(df_peso) >= 2:
+            x_ord = np.array([d.toordinal() for d in df_peso["Data_dt"]])
+            y = np.array(df_peso["Peso"])
+            m, b = np.polyfit(x_ord, y, 1)
+            y_trend = m*x_ord + b
+            mode_plot = "lines+markers"
+        else:
+            y_trend = np.array(df_peso["Peso"])
+            mode_plot = "markers"
+
+        fig_line = go.Figure(go.Scatter(
+            x=df_peso["Data_dt"].tolist(),
+            y=y_trend.tolist(),
+            mode=mode_plot,
+            line=dict(color="#8e44ad", width=3)
+        ))
+        fig_line.update_layout(
+            yaxis_title="Peso (kg)",
+            xaxis_title="Data",
+            template="plotly_white",
+            height=400
+        )
+        st.plotly_chart(fig_line, use_container_width=True)
     else:
-        y_trend = np.array(df_peso["Peso"])
-        mode_plot = "markers"
-
-    fig_line = go.Figure(go.Scatter(
-        x=df_peso["Data_dt"].tolist(),
-        y=y_trend.tolist(),
-        mode=mode_plot,
-        line=dict(color="#8e44ad", width=3)
-    ))
-    fig_line.update_layout(
-        yaxis_title="Peso (kg)",
-        xaxis_title="Data",
-        template="plotly_white",
-        height=400
-    )
-    st.plotly_chart(fig_line, use_container_width=True)
-else:
-    st.info("Registre pelo menos um peso para ver a tendência.")
+        st.info("Registre pelo menos um peso para ver a tendência.")
 
 # -----------------------------
 # FUNÇÃO REGISTRAR ATIVIDADES FÍSICAS (AJUSTADA)
