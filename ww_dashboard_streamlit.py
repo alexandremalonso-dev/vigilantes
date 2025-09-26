@@ -211,71 +211,6 @@ def persist_all():
 
 
 # -----------------------------
-# FLAGS DE PRIMEIRO LOGIN E COMPLETAR PERFIL
-# -----------------------------
-if "primeiro_login" not in st.session_state:
-    st.session_state.primeiro_login = False
-
-def perfil_incompleto():
-    """Checa se o perfil está incompleto (NÃO exige campo 'extras' no formulário)."""
-    return (
-        not st.session_state.get("peso")
-        or not st.session_state.get("meta_diaria")
-        or not st.session_state.get("sexo")
-        or not st.session_state.get("idade")
-        or not st.session_state.get("altura")
-        or not st.session_state.get("objetivo")
-        or not st.session_state.get("nivel_atividade")
-    )
-
-# Função para completar perfil (SEM campo 'extras')
-def completar_perfil():
-    st.header("⚙️ Complete seu perfil")
-    sexo = st.selectbox("Sexo:", ["Masculino", "Feminino"], key="perfil_sexo")
-    idade = st.number_input("Idade:", min_value=10, max_value=120, step=1, key="perfil_idade")
-    altura = st.number_input("Altura (m):", min_value=1.0, max_value=2.5, step=0.01, key="perfil_altura")
-    objetivo = st.selectbox("Objetivo:", ["emagrecimento", "manutenção", "ganho"], key="perfil_objetivo")
-    nivel_atividade = st.selectbox("Nível de Atividade:", ["sedentário", "moderado", "intenso"], key="perfil_nivel")
-    peso_inicial = st.number_input("Peso inicial (kg):", min_value=0.0, step=0.1, key="perfil_peso")
-
-    if st.button("Salvar perfil", key="bot_salvar_perfil"):
-        # Inicializa peso e histórico acumulado
-        st.session_state.peso = [peso_inicial]
-        st.session_state.datas_peso = [datetime.date.today()]
-        st.session_state.sexo = sexo
-        st.session_state.idade = idade
-        st.session_state.altura = altura
-        st.session_state.objetivo = objetivo
-        st.session_state.nivel_atividade = nivel_atividade
-
-        # Adiciona peso inicial ao histórico acumulado
-        add_to_historico({
-            "tipo": "peso",
-            "nome": "Peso inicial",
-            "quantidade": peso_inicial,
-            "pontos": 0,
-            "data": datetime.date.today()
-        })
-
-        # Calcula meta automaticamente
-        try:
-            st.session_state.meta_diaria = calcular_meta_diaria(
-                sexo=sexo,
-                idade=idade,
-                peso=peso_inicial,
-                altura=altura,
-                objetivo=objetivo,
-                nivel_atividade=nivel_atividade
-            )
-        except Exception:
-            st.session_state.meta_diaria = st.session_state.get("meta_diaria", 29)
-
-        st.session_state.primeiro_login = False
-        persist_all()
-        st.success("Perfil salvo com sucesso!")
-        rerun_streamlit()
-
-# -----------------------------
 # FUNÇÃO RESET HISTÓRICO
 # -----------------------------
 def reset_historico():
@@ -670,7 +605,7 @@ def registrar_consumo():
                 cols[0].write(display)
 
                 # Editar
-                if cols[1].button("Editar", key=f"edit_cons_{idx}"):
+                if cols[1].button("✏️", key=f"edit_cons_{idx}"):
                     edit_key_q = f"edit_q_{idx}"
                     save_key = f"save_cons_{idx}"
                     with st.expander(f"Editar registro #{idx}", expanded=True):
@@ -695,13 +630,12 @@ def registrar_consumo():
                             st.stop()
 
                 # Excluir
-                if cols[2].button("Excluir", key=f"del_cons_{idx}"):
+                if cols[2].button("❌", key=f"del_cons_{idx}"):
                     st.session_state.historico_acumulado.remove(reg)
                     rebuild_pontos_semana_from_history()
                     persist_all()
                     st.success("Registro excluído.")
                     st.stop()
-
 
 # -----------------------------
 # FUNÇÃO CALCULAR META DIÁRIA
@@ -790,7 +724,7 @@ def registrar_peso():
         if submitted:
             registro = {
                 "tipo": "peso",
-                "data": datetime.date.today().isoformat(),  # CONVERTIDO PARA STRING
+                "data": datetime.date.today().isoformat(),  # convertido para string ISO
                 "nome": "Peso registrado",
                 "quantidade": float(peso_novo),
                 "pontos": 0,
@@ -1222,7 +1156,6 @@ if st.session_state.menu == "dashboard":
         f"</div>", unsafe_allow_html=True
     )
 
-
     # -----------------------------
     # Gráficos principais
     # -----------------------------
@@ -1313,6 +1246,7 @@ def exibir_historicos_dashboard():
     historico = st.session_state.get("historico_acumulado", [])
 
     def parse_date(d):
+        """Converte string ISO ou objeto para datetime.date."""
         if isinstance(d, datetime.date):
             return d
         try:
@@ -1339,7 +1273,6 @@ def exibir_historicos_dashboard():
             r for r in historico
             if r.get("tipo") == "consumo" and parse_date(r.get("data")) == hoje
         ]
-
         if consumos_hoje:
             for reg in sorted(consumos_hoje, key=lambda x: parse_date(x["data"])):
                 dia = parse_date(reg["data"])
@@ -1359,19 +1292,19 @@ def exibir_historicos_dashboard():
     # -----------------------------
     with col_hist2:
         st.markdown("### 🏃 Histórico de Atividades Físicas")
-        acts_list = [
-            (d, a.get('tipo'), a.get('minutos',0), a.get('pontos',0))
-            for d, lst in st.session_state.get("activities", {}).items()
-            for a in lst
-            if mesma_semana(parse_date(d))
+        historico_atividades_semana = [
+            r for r in historico
+            if r.get("tipo") == "atividade" and mesma_semana(parse_date(r.get("data")))
         ]
-        if acts_list:
-            for d, tipo, minutos, pontos in sorted(acts_list, key=lambda x: parse_date(x[0])):
-                d_str = d.strftime("%d/%m/%Y") if isinstance(d, datetime.date) else str(d)
-                dia_sem = weekday_name_br(d) if isinstance(d, datetime.date) else ""
+        if historico_atividades_semana:
+            for reg in sorted(historico_atividades_semana, key=lambda x: parse_date(x["data"])):
+                dia = parse_date(reg["data"])
+                dia_sem = weekday_name_br(dia) if dia else ""
                 st.markdown(
                     f"<div style='padding:10px; border:1px solid #1abc9c; border-radius:5px; margin-bottom:5px;'>"
-                    f"{d_str} ({dia_sem}): {tipo} - {minutos:.2f} min <span style='color:#1f3c88'>({pontos:.2f} pts)</span>"
+                    f"{dia.strftime('%d/%m/%Y') if dia else str(reg['data'])} ({dia_sem}): "
+                    f"{reg['nome']} - {int(reg.get('quantidade',0))} min "
+                    f"<span style='color:#1f3c88'>({reg.get('pontos',0):.2f} pts)</span>"
                     f"</div>", unsafe_allow_html=True
                 )
         else:
@@ -1400,10 +1333,10 @@ def exibir_historicos_dashboard():
                         tendencia = "⬆️"
                     else:
                         tendencia = "➖"
-                dia_sem = weekday_name_br(d)
+                dia_sem = weekday_name_br(d) if d else ""
                 st.markdown(
                     f"<div style='padding:10px; border:1px solid #3498db; border-radius:5px; margin-bottom:5px;'>"
-                    f"{d.strftime('%d/%m/%Y')} ({dia_sem}): {p:.2f} kg {tendencia}</div>",
+                    f"{d.strftime('%d/%m/%Y') if d else str(reg['data'])} ({dia_sem}): {p:.2f} kg {tendencia}</div>",
                     unsafe_allow_html=True
                 )
         else:
@@ -1412,7 +1345,7 @@ def exibir_historicos_dashboard():
 # -----------------------------
 # Chamada somente no Dashboard
 # -----------------------------
-if st.session_state.menu == "🏠 Dashboard":
+if st.session_state.menu == "dashboard":
     exibir_historicos_dashboard()
 
 # -----------------------------
