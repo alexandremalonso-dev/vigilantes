@@ -723,40 +723,68 @@ def add_to_historico(entry: dict):
 # -----------------------------
 # Registrar Consumo
 # -----------------------------
-if st.button("Salvar alterações", key=f"save_edit_consumo_{i}"):
-    try:
-        st.session_state.consumo_historico[i]["nome"] = novo_nome
-        st.session_state.consumo_historico[i]["quantidade"] = nova_qtd
-        st.session_state.consumo_historico[i]["pontos"] = novos_pontos
+def registrar_consumo():
+    st.header("🍴 Registrar Consumo")
 
-        # Atualiza pontos_semana também
-        semana_atual = datetime.date.today().isocalendar()[1]
-        semana_existente = next((s for s in st.session_state.pontos_semana if s["semana"] == semana_atual), None)
-        if not semana_existente:
-            semana_existente = {"semana": semana_atual, "pontos": [], "extras": 36.0}
-            st.session_state.pontos_semana.append(semana_existente)
-        semana_existente["pontos"].append({
-            "data": datetime.date.today(),
-            "nome": novo_nome,
-            "quantidade": nova_qtd,
-            "pontos": novos_pontos,
-            "usou_extras": 0.0
-        })
+    if not st.session_state.alimentos:
+        st.warning("Nenhum alimento cadastrado ainda.")
+        return
 
-        add_to_historico({
-            "data": datetime.date.today(),
-            "tipo": "alimento",
-            "nome": novo_nome,
-            "quantidade": nova_qtd,
-            "pontos": novos_pontos,
-            "usou_extras": 0.0
-        })
+    # Inicializa flags e listas
+    if "consumo_historico" not in st.session_state:
+        st.session_state.consumo_historico = []
+    if "pontos_semana" not in st.session_state:
+        st.session_state.pontos_semana = []
+    if "mostrar_historico_consumo" not in st.session_state:
+        st.session_state.mostrar_historico_consumo = False
 
-        persist_all()
-        st.success("Consumo atualizado com sucesso!")
-        st.experimental_rerun()
-    except Exception as e:
-        st.error(f"Erro ao salvar alterações: {e}")
+    # Seleção do alimento
+    nomes = sorted([a["Nome"] for a in st.session_state.alimentos])
+    escolha = st.selectbox("Escolha o alimento:", nomes, key="consumo_select")
+    alimento = next((a for a in st.session_state.alimentos if a["Nome"] == escolha), None)
+    if alimento is None:
+        st.error("Alimento não encontrado.")
+        return
+
+    porcao_ref = float(alimento.get("Porcao", 100.0))
+    pontos_por_porcao = round_points(alimento.get("Pontos", 0.0))
+    st.markdown(f"**Porção referência:** {porcao_ref} g — Pontos (por porção): **{pontos_por_porcao}**")
+
+    # -----------------------------
+    # Formulário para registrar quantidade
+    # -----------------------------
+    with st.form("form_reg_consumo", clear_on_submit=False):
+        quantidade = st.number_input(
+            f"Quantidade consumida em gramas (porção {porcao_ref} g):",
+            min_value=0.0,
+            step=1.0,
+            format="%.2f",
+            key="reg_quant"
+        )
+        submitted = st.form_submit_button("Registrar consumo")
+
+        if submitted:
+            pontos_registrados = 0 if alimento.get("ZeroPontos", False) else round_points(
+                float(alimento.get("Pontos", 0.0)) * (quantidade / porcao_ref if porcao_ref > 0 else 0.0)
+            )
+
+            registro = {
+                "tipo": "alimento",
+                "data": datetime.date.today(),
+                "nome": escolha,
+                "quantidade": float(quantidade),
+                "pontos": pontos_registrados,
+                "usou_extras": 0.0
+            }
+            st.session_state.consumo_historico.append(registro)
+
+            # Atualiza pontos semanais
+            rebuild_pontos_semana_from_history()
+            add_to_historico(registro)
+            persist_all()
+            st.success(f"🍴 Registrado {quantidade:.2f}g de {escolha}. Pontos: {pontos_registrados:.2f}")
+            st.session_state.mostrar_historico_consumo = True
+            st.experimental_rerun()
 
 # -----------------------------
 # FUNÇÃO CALCULAR META DIÁRIA
@@ -1983,7 +2011,6 @@ def calcular_meta_diaria(peso, altura, idade, sexo, objetivo, nivel_atividade):
     pontos = max(28, min(round_points(pontos), 30))
 
     return pontos
-
 
 # -----------------------------
 # ROTAS / PAGES
