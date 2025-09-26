@@ -1374,6 +1374,7 @@ if st.session_state.menu == "dashboard":
 
         # Histórico de Peso
         with col_hist3:
+            st.markdown("### ⚖️ Histórico de Peso")
             historico_peso_semana = [
                 r for r in historico
                 if r.get("tipo") == "peso" and mesma_semana(parse_date(r.get("data")))
