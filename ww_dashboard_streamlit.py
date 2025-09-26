@@ -808,16 +808,23 @@ def registrar_peso():
                     rerun_streamlit()
 
 # -----------------------------
-# Função Página Perfil
+# Função Página Perfil (corrigida)
 # -----------------------------
 import datetime
 
 def perfil_page():
     st.header("📋 Perfil do Usuário")
 
-    # Garante histórico acumulado inicializado
+    # Inicializa chaves se não existirem
     if "historico_acumulado" not in st.session_state:
         st.session_state.historico_acumulado = []
+
+    st.session_state.sexo = st.session_state.get("sexo", "feminino")
+    st.session_state.idade = st.session_state.get("idade", 30)
+    st.session_state.altura = st.session_state.get("altura", 1.70)
+    st.session_state.objetivo = st.session_state.get("objetivo", "manutenção")
+    st.session_state.nivel_atividade = st.session_state.get("nivel_atividade", "sedentário")
+    st.session_state.meta_diaria = st.session_state.get("meta_diaria", 28)
 
     st.subheader("Informações Atuais")
     st.write(f"**Sexo:** {st.session_state.sexo}")
@@ -827,6 +834,7 @@ def perfil_page():
     st.write(f"**Nível de atividade:** {st.session_state.nivel_atividade}")
     st.write(f"**Meta diária:** {st.session_state.meta_diaria} pontos")
 
+    # Edição do perfil
     with st.expander("✏️ Editar Perfil"):
         sexo = st.selectbox(
             "Sexo", ["feminino", "masculino"],
@@ -854,8 +862,9 @@ def perfil_page():
             st.session_state.objetivo = objetivo
             st.session_state.nivel_atividade = nivel_atividade
 
-            # Verifica se há peso no histórico; se não, adiciona registro inicial 0
-            if not [r for r in st.session_state.historico_acumulado if r.get("tipo") == "peso"]:
+            # Verifica peso no histórico, se não houver adiciona inicial 0
+            historico_peso = [r for r in st.session_state.historico_acumulado if r.get("tipo") == "peso"]
+            if not historico_peso:
                 st.session_state.historico_acumulado.append({
                     "tipo": "peso",
                     "data": datetime.date.today().isoformat(),
@@ -864,11 +873,11 @@ def perfil_page():
                     "pontos": 0,
                     "usou_extras": 0.0
                 })
+                ultimo_peso = 0.0
+            else:
+                ultimo_peso = historico_peso[-1]["quantidade"]
 
-            # Recalcula meta diária usando o último peso registrado
-            historico_peso = [r for r in st.session_state.historico_acumulado if r.get("tipo") == "peso"]
-            ultimo_peso = historico_peso[-1]["quantidade"] if historico_peso else 0.0
-
+            # Recalcula meta diária
             st.session_state.meta_diaria = calcular_meta_diaria(
                 sexo=st.session_state.sexo,
                 idade=st.session_state.idade,
