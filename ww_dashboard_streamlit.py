@@ -1115,45 +1115,93 @@ def consultar_alimento():
                 rerun_streamlit()
 
 # -----------------------------
-# DASHBOARD PRINCIPAL COMPLETO COM HISTÓRICOS E GRÁFICOS
+# DASHBOARD PRINCIPAL COMPLETO COM HISTÓRICOS E GRÁFICOS (AJUSTADO)
 # -----------------------------
 import datetime
 import plotly.graph_objects as go
 import numpy as np
 import pandas as pd
 
+# Apenas executa o dashboard quando a rota/menu for 'dashboard'
 if st.session_state.menu == "dashboard":
+
     st.markdown("<h1 style='text-align: center; color: #2c3e50;'>🍏 Vigilantes do Peso Brasil</h1>", unsafe_allow_html=True)
 
-    # Inicializa chaves de perfil com valores default se não existirem
+    # ---------- Inicialização defensiva de session_state ----------
     if "historico_acumulado" not in st.session_state:
         st.session_state.historico_acumulado = []
 
+    # perfil
     st.session_state.sexo = st.session_state.get("sexo", "feminino")
     st.session_state.idade = st.session_state.get("idade", 30)
     st.session_state.altura = st.session_state.get("altura", 1.70)
     st.session_state.objetivo = st.session_state.get("objetivo", "manutenção")
     st.session_state.nivel_atividade = st.session_state.get("nivel_atividade", "sedentário")
     st.session_state.meta_diaria = st.session_state.get("meta_diaria", 28)
-    st.session_state.peso = st.session_state.get("peso", [0.0])
 
-    # Primeiro login ou perfil incompleto
-    if st.session_state.get("primeiro_login", False) or perfil_incompleto():
-        completar_perfil()
+    # listas/valores operacionais
+    st.session_state.peso = st.session_state.get("peso", [0.0])
+    st.session_state.consumo_diario = st.session_state.get("consumo_diario", 0.0)
+    st.session_state.pontos_semana = st.session_state.get("pontos_semana", [])
+    st.session_state.extras = st.session_state.get("extras", 36.0)
+    st.session_state.activities = st.session_state.get("activities", {})
+
+    # ---------- utilitário local para datas ----------
+    def parse_date(d):
+        """Converte string ISO ou objeto para datetime.date; retorna None se inválido."""
+        if isinstance(d, datetime.date):
+            return d
+        try:
+            return datetime.date.fromisoformat(str(d))
+        except Exception:
+            try:
+                # tenta alguns formatos comuns (fallback)
+                return datetime.datetime.strptime(str(d), "%Y-%m-%d").date()
+            except Exception:
+                return None
+
+    # ---------- Verifica perfil incompleto de forma segura ----------
+    # Certifique-se que sua função perfil_incompleto() esteja compatível; caso queira
+    # usar a checagem inline:
+    def perfil_incompleto_safe():
+        return (
+            not st.session_state.get("peso", [0.0])
+            or not st.session_state.get("meta_diaria", 28)
+            or not st.session_state.get("sexo", "feminino")
+            or not st.session_state.get("idade", 30)
+            or not st.session_state.get("altura", 1.70)
+            or not st.session_state.get("objetivo", "manutenção")
+            or not st.session_state.get("nivel_atividade", "sedentário")
+        )
+
+    # Use a função existente se preferir; fallback para a safe
+    try:
+        incomplete = perfil_incompleto()
+    except Exception:
+        incomplete = perfil_incompleto_safe()
+
+    # ---------- Se perfil incompleto, chama completar_perfil() (que deve estar ajustada) ----------
+    if st.session_state.get("primeiro_login", False) or incomplete:
+        # completar_perfil() não deve usar add_to_historico() — veja versão ajustada
+        try:
+            completar_perfil()
+        except Exception as e:
+            st.error("Erro ao abrir o formulário de perfil. Verifique completar_perfil().")
+            st.exception(e)
         st.stop()
 
-    # Garantir semana atual e reconstruir pontos
+    # ---------- Garantir semana atual e reconstruir pontos ----------
     ensure_current_week_exists()
     rebuild_pontos_semana_from_history()
 
     hoje = datetime.date.today()
     semana_atual = iso_week_number(hoje)
 
-    # Peso atual baseado no histórico acumulado
+    # ---------- Peso atual (a partir do historico_acumulado) ----------
     historico_peso = [r for r in st.session_state.historico_acumulado if r.get("tipo") == "peso"]
     peso_atual = historico_peso[-1]["quantidade"] if historico_peso else 0.0
 
-    # Consumo diário calculado a partir do histórico acumulado
+    # ---------- Consumo diário (a partir do historico_acumulado) ----------
     consumo_diario = sum(
         r.get("pontos", 0.0)
         for r in st.session_state.historico_acumulado
@@ -1161,22 +1209,21 @@ if st.session_state.menu == "dashboard":
     )
     st.session_state.consumo_diario = consumo_diario
 
-    # Garante que exista objeto da semana atual
+    # ---------- Garante objeto da semana atual ----------
     semana_obj = next((w for w in st.session_state.pontos_semana if w.get("semana") == semana_atual), None)
     if semana_obj is None:
-        semana_obj = {"semana": semana_atual, "pontos": [], "extras": float(st.session_state.get("extras", 36.0))}
+        semana_obj = {"semana": semana_atual, "pontos": [], "extras": float(st.session_state.extras)}
         st.session_state.pontos_semana.append(semana_obj)
 
     extras_disponiveis = float(semana_obj.get("extras", 36.0))
 
-    # Painel principal de resumo
+    # ---------- Painel principal de resumo ----------
     st.markdown(
         f"<div style='background-color:#dff9fb;padding:15px;border-radius:10px;text-align:center;font-size:22px;'>"
         f"<b>Pontos consumidos hoje: {consumo_diario:.2f} / {st.session_state.meta_diaria} | "
         f"Extras disponíveis (semana): {extras_disponiveis:.2f} | Peso atual: {peso_atual:.2f} kg</b>"
         f"</div>", unsafe_allow_html=True
     )
-
 
     # -----------------------------
     # Gráficos principais
@@ -1186,13 +1233,13 @@ if st.session_state.menu == "dashboard":
 
     # Consumo Diário
     with col1:
-        meta_diaria = st.session_state.meta_diaria
-        consumo_diario = float(st.session_state.consumo_diario)
+        meta_diaria = st.session_state.meta_diaria or 1
+        consumo_diario_val = float(st.session_state.consumo_diario or 0.0)
         fig1 = go.Figure(go.Indicator(
             mode="gauge+number",
-            value=consumo_diario,
+            value=consumo_diario_val,
             number={'suffix': f" / {meta_diaria}"},
-            gauge={'axis': {'range': [0, meta_diaria]},
+            gauge={'axis': {'range': [0, max(meta_diaria, 1)]},
                    'bar': {'color': "#e74c3c"},
                    'steps': [
                        {'range': [0, meta_diaria * 0.7], 'color': "#2ecc71"},
@@ -1205,26 +1252,31 @@ if st.session_state.menu == "dashboard":
 
     # Pontos Extras
     with col2:
-        pontos_atividade_semana = sum(
-            a.get('pontos', 0.0)
-            for dia_str, lst in st.session_state.get("activities", {}).items()
-            for a in lst
-            if iso_week_number(datetime.datetime.strptime(dia_str, "%Y-%m-%d").date() if isinstance(dia_str, str) else dia_str) == semana_atual
-        )
+        # soma pontos de activities filtrando por semana atual (tratando keys str/date)
+        pontos_atividade_semana = 0.0
+        for k, lst in st.session_state.get("activities", {}).items():
+            d = parse_date(k)
+            if d and iso_week_number(d) == semana_atual:
+                for a in lst:
+                    pontos_atividade_semana += float(a.get("pontos", 0.0))
+
         extras_disponiveis = float(semana_obj.get("extras", 36.0))
-        total_banco = extras_disponiveis + pontos_atividade_semana
-        excesso_diario = max(0, st.session_state.consumo_diario - st.session_state.meta_diaria)
+        total_banco = max(0.0, extras_disponiveis + pontos_atividade_semana)
+        excesso_diario = max(0.0, st.session_state.consumo_diario - float(st.session_state.meta_diaria or 0))
+
+        # evita div/zero no gauge quando total_banco == 0
+        max_range = total_banco if total_banco > 0 else 1.0
 
         fig2 = go.Figure(go.Indicator(
             mode="gauge+number",
             value=excesso_diario,
             number={'suffix': f" / {total_banco:.0f}"},
-            gauge={'axis': {'range': [0, total_banco]},
+            gauge={'axis': {'range': [0, max_range]},
                    'bar': {'color': "#006400"},
                    'steps': [
-                       {'range': [0, total_banco/3], 'color': "#e74c3c"},
-                       {'range': [total_banco/3, 2*total_banco/3], 'color': "#f1c40f"},
-                       {'range': [2*total_banco/3, total_banco], 'color': "#2ecc71"}
+                       {'range': [0, max_range/3], 'color': "#e74c3c"},
+                       {'range': [max_range/3, 2*max_range/3], 'color': "#f1c40f"},
+                       {'range': [2*max_range/3, max_range], 'color': "#2ecc71"}
                    ]},
             title={'text': "⭐ Pontos Extras (semana)"}
         ))
@@ -1233,23 +1285,24 @@ if st.session_state.menu == "dashboard":
 
     # Peso Atual
     with col3:
-        if len(st.session_state.peso) <= 1:
+        pesolist = st.session_state.get("peso", [0.0])
+        if len(pesolist) <= 1:
             cor_gauge = "blue"
             tendencia = "➖"
         else:
-            if st.session_state.peso[-1] < st.session_state.peso[-2]:
+            if pesolist[-1] < pesolist[-2]:
                 cor_gauge = "green"
                 tendencia = "⬇️"
-            elif st.session_state.peso[-1] > st.session_state.peso[-2]:
+            elif pesolist[-1] > pesolist[-2]:
                 cor_gauge = "orange"
                 tendencia = "⬆️"
             else:
                 cor_gauge = "blue"
                 tendencia = "➖"
 
-        peso_atual = st.session_state.peso[-1] if st.session_state.peso else 0.0
-        min_axis = min(st.session_state.peso) - 5 if st.session_state.peso else 0
-        max_axis = max(st.session_state.peso) + 5 if st.session_state.peso else 100
+        peso_atual = pesolist[-1] if pesolist else 0.0
+        min_axis = (min(pesolist) - 5) if pesolist else 0
+        max_axis = (max(pesolist) + 5) if pesolist else 100
         fig_gauge = go.Figure(go.Indicator(
             mode="gauge+number",
             value=peso_atual,
@@ -1260,115 +1313,100 @@ if st.session_state.menu == "dashboard":
         fig_gauge.update_layout(height=graf_height)
         st.plotly_chart(fig_gauge, use_container_width=True)
 
-# -----------------------------
-# FUNÇÃO PARA EXIBIR HISTÓRICOS NO DASHBOARD (AJUSTADA)
-# -----------------------------
-def exibir_historicos_dashboard():
-    col_hist1, col_hist2, col_hist3 = st.columns(3)
-    historico = st.session_state.get("historico_acumulado", [])
-
-    def parse_date(d):
-        """Converte string ISO ou objeto para datetime.date."""
-        if isinstance(d, datetime.date):
-            return d
-        try:
-            return datetime.date.fromisoformat(str(d))
-        except:
-            return None
-
-    hoje = datetime.date.today()
-    semana_atual = hoje.isocalendar()[1]
-    ano_atual = hoje.isocalendar()[0]
-
-    def mesma_semana(dt):
-        if not dt:
-            return False
-        iso = dt.isocalendar()
-        return iso[0] == ano_atual and iso[1] == semana_atual
-
     # -----------------------------
-    # Pontos / Consumo Diário
+    # FUNÇÃO PARA EXIBIR HISTÓRICOS NO DASHBOARD (AJUSTADA)
     # -----------------------------
-    with col_hist1:
-        st.markdown("### 📊 Pontos / Consumo Diário")
-        consumos_hoje = [
-            r for r in historico
-            if r.get("tipo") == "consumo" and parse_date(r.get("data")) == hoje
-        ]
-        if consumos_hoje:
-            for reg in sorted(consumos_hoje, key=lambda x: parse_date(x["data"])):
-                dia = parse_date(reg["data"])
-                dia_str = dia.strftime("%d/%m/%Y") if dia else str(reg["data"])
-                dia_sem = weekday_name_br(dia) if dia else ""
-                st.markdown(
-                    f"<div style='padding:10px; border:1px solid #f39c12; border-radius:5px; margin-bottom:5px;'>"
-                    f"{dia_str} ({dia_sem}): {reg['nome']} {reg.get('quantidade',0):.2f} g "
-                    f"<span style='color:#1f3c88'>({reg.get('pontos',0):.2f} pts)</span>"
-                    f"</div>", unsafe_allow_html=True
-                )
-        else:
-            st.write(" - (sem registros hoje)")
+    def exibir_historicos_dashboard():
+        col_hist1, col_hist2, col_hist3 = st.columns(3)
+        historico = st.session_state.get("historico_acumulado", [])
 
-    # -----------------------------
-    # Histórico de Atividades
-    # -----------------------------
-    with col_hist2:
-        st.markdown("### 🏃 Histórico de Atividades Físicas")
-        historico_atividades_semana = [
-            r for r in historico
-            if r.get("tipo") == "atividade" and mesma_semana(parse_date(r.get("data")))
-        ]
-        if historico_atividades_semana:
-            for reg in sorted(historico_atividades_semana, key=lambda x: parse_date(x["data"])):
-                dia = parse_date(reg["data"])
-                dia_sem = weekday_name_br(dia) if dia else ""
-                st.markdown(
-                    f"<div style='padding:10px; border:1px solid #1abc9c; border-radius:5px; margin-bottom:5px;'>"
-                    f"{dia.strftime('%d/%m/%Y') if dia else str(reg['data'])} ({dia_sem}): "
-                    f"{reg['nome']} - {int(reg.get('quantidade',0))} min "
-                    f"<span style='color:#1f3c88'>({reg.get('pontos',0):.2f} pts)</span>"
-                    f"</div>", unsafe_allow_html=True
-                )
-        else:
-            st.info("Nenhuma atividade registrada ainda.")
+        hoje = datetime.date.today()
+        semana_atual_local = hoje.isocalendar()[1]
+        ano_atual_local = hoje.isocalendar()[0]
 
-    # -----------------------------
-    # Histórico de Peso
-    # -----------------------------
-    with col_hist3:
-        historico_peso_semana = [
-            r for r in historico
-            if r.get("tipo") == "peso" and mesma_semana(parse_date(r.get("data")))
-        ]
-        if historico_peso_semana:
-            historico_peso_semana_sorted = sorted(historico_peso_semana, key=lambda x: parse_date(x["data"]))
-            for idx, reg in enumerate(historico_peso_semana_sorted):
-                p = reg["quantidade"]
-                d = parse_date(reg["data"])
-                if idx == 0:
-                    tendencia = "➖"
-                else:
-                    p_ant = historico_peso_semana_sorted[idx-1]["quantidade"]
-                    if p < p_ant:
-                        tendencia = "⬇️"
-                    elif p > p_ant:
-                        tendencia = "⬆️"
-                    else:
+        def mesma_semana(dt):
+            if not dt:
+                return False
+            iso = dt.isocalendar()
+            return iso[0] == ano_atual_local and iso[1] == semana_atual_local
+
+        # Pontos / Consumo Diário
+        with col_hist1:
+            st.markdown("### 📊 Pontos / Consumo Diário")
+            consumos_hoje = [
+                r for r in historico
+                if r.get("tipo") == "consumo" and parse_date(r.get("data")) == hoje
+            ]
+            if consumos_hoje:
+                for reg in sorted(consumos_hoje, key=lambda x: parse_date(x["data"])):
+                    dia = parse_date(reg["data"])
+                    dia_str = dia.strftime("%d/%m/%Y") if dia else str(reg["data"])
+                    dia_sem = weekday_name_br(dia) if dia else ""
+                    st.markdown(
+                        f"<div style='padding:10px; border:1px solid #f39c12; border-radius:5px; margin-bottom:5px;'>"
+                        f"{dia_str} ({dia_sem}): {reg['nome']} {reg.get('quantidade',0):.2f} g "
+                        f"<span style='color:#1f3c88'>({reg.get('pontos',0):.2f} pts)</span>"
+                        f"</div>", unsafe_allow_html=True
+                    )
+            else:
+                st.write(" - (sem registros hoje)")
+
+        # Histórico de Atividades
+        with col_hist2:
+            st.markdown("### 🏃 Histórico de Atividades Físicas")
+            historico_atividades_semana = [
+                r for r in historico
+                if r.get("tipo") == "atividade" and mesma_semana(parse_date(r.get("data")))
+            ]
+            if historico_atividades_semana:
+                for reg in sorted(historico_atividades_semana, key=lambda x: parse_date(x["data"])):
+                    dia = parse_date(reg["data"])
+                    dia_sem = weekday_name_br(dia) if dia else ""
+                    st.markdown(
+                        f"<div style='padding:10px; border:1px solid #1abc9c; border-radius:5px; margin-bottom:5px;'>"
+                        f"{dia.strftime('%d/%m/%Y') if dia else str(reg['data'])} ({dia_sem}): "
+                        f"{reg['nome']} - {int(reg.get('quantidade',0))} min "
+                        f"<span style='color:#1f3c88'>({reg.get('pontos',0):.2f} pts)</span>"
+                        f"</div>", unsafe_allow_html=True
+                    )
+            else:
+                st.info("Nenhuma atividade registrada ainda.")
+
+        # Histórico de Peso
+        with col_hist3:
+            historico_peso_semana = [
+                r for r in historico
+                if r.get("tipo") == "peso" and mesma_semana(parse_date(r.get("data")))
+            ]
+            if historico_peso_semana:
+                historico_peso_semana_sorted = sorted(historico_peso_semana, key=lambda x: parse_date(x["data"]))
+                for idx, reg in enumerate(historico_peso_semana_sorted):
+                    p = reg["quantidade"]
+                    d = parse_date(reg["data"])
+                    if idx == 0:
                         tendencia = "➖"
-                dia_sem = weekday_name_br(d) if d else ""
-                st.markdown(
-                    f"<div style='padding:10px; border:1px solid #3498db; border-radius:5px; margin-bottom:5px;'>"
-                    f"{d.strftime('%d/%m/%Y') if d else str(reg['data'])} ({dia_sem}): {p:.2f} kg {tendencia}</div>",
-                    unsafe_allow_html=True
-                )
-        else:
-            st.info("Nenhum peso registrado nesta semana.")
+                    else:
+                        p_ant = historico_peso_semana_sorted[idx-1]["quantidade"]
+                        if p < p_ant:
+                            tendencia = "⬇️"
+                        elif p > p_ant:
+                            tendencia = "⬆️"
+                        else:
+                            tendencia = "➖"
+                    dia_sem = weekday_name_br(d) if d else ""
+                    st.markdown(
+                        f"<div style='padding:10px; border:1px solid #3498db; border-radius:5px; margin-bottom:5px;'>"
+                        f"{d.strftime('%d/%m/%Y') if d else str(reg['data'])} ({dia_sem}): {p:.2f} kg {tendencia}</div>",
+                        unsafe_allow_html=True
+                    )
+            else:
+                st.info("Nenhum peso registrado nesta semana.")
 
-# -----------------------------
-# Chamada somente no Dashboard
-# -----------------------------
-if st.session_state.menu == "dashboard":
+    # -----------------------------
+    # Chamada somente no Dashboard
+    # -----------------------------
     exibir_historicos_dashboard()
+
 
 # -----------------------------
 # Tendência de Peso (linha) - exclusivo do Dashboard
