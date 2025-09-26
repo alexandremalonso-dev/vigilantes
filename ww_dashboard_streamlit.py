@@ -1125,6 +1125,18 @@ import pandas as pd
 if st.session_state.menu == "dashboard":
     st.markdown("<h1 style='text-align: center; color: #2c3e50;'>🍏 Vigilantes do Peso Brasil</h1>", unsafe_allow_html=True)
 
+    # Inicializa chaves de perfil com valores default se não existirem
+    if "historico_acumulado" not in st.session_state:
+        st.session_state.historico_acumulado = []
+
+    st.session_state.sexo = st.session_state.get("sexo", "feminino")
+    st.session_state.idade = st.session_state.get("idade", 30)
+    st.session_state.altura = st.session_state.get("altura", 1.70)
+    st.session_state.objetivo = st.session_state.get("objetivo", "manutenção")
+    st.session_state.nivel_atividade = st.session_state.get("nivel_atividade", "sedentário")
+    st.session_state.meta_diaria = st.session_state.get("meta_diaria", 28)
+    st.session_state.peso = st.session_state.get("peso", [0.0])
+
     # Primeiro login ou perfil incompleto
     if st.session_state.get("primeiro_login", False) or perfil_incompleto():
         completar_perfil()
@@ -1164,6 +1176,7 @@ if st.session_state.menu == "dashboard":
         f"Extras disponíveis (semana): {extras_disponiveis:.2f} | Peso atual: {peso_atual:.2f} kg</b>"
         f"</div>", unsafe_allow_html=True
     )
+
 
     # -----------------------------
     # Gráficos principais
