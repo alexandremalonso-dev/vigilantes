@@ -1459,6 +1459,14 @@ if st.session_state.menu == "🏠 Dashboard":
 # FUNÇÃO PARA EXIBIR HISTÓRICOS NO DASHBOARD (AJUSTADA)
 # -----------------------------
 def exibir_historicos_dashboard():
+    # Inicializa flags de exibição de históricos
+    if "mostrar_historico_consumo" not in st.session_state:
+        st.session_state.mostrar_historico_consumo = False
+    if "mostrar_historico_atividade" not in st.session_state:
+        st.session_state.mostrar_historico_atividade = False
+    if "mostrar_historico_peso" not in st.session_state:
+        st.session_state.mostrar_historico_peso = False
+
     col_hist1, col_hist2, col_hist3 = st.columns(3)
     historico = st.session_state.get("historico_acumulado", [])
 
@@ -1507,7 +1515,7 @@ def exibir_historicos_dashboard():
                     with st.expander(f"Editar registro #{i}", expanded=True):
                         nova_qtd = st.number_input("Quantidade (g):", min_value=0.0, step=1.0, value=nova_qtd, key=edit_key_q)
 
-                        # ⚠ Botão Salvar alterações dentro do loop para que `i` exista
+                        # ⚠ Botão Salvar alterações dentro do loop
                         if st.button("Salvar alterações", key=f"save_edit_cons_dash_{i}"):
                             try:
                                 # Atualiza histórico de consumo
@@ -1548,7 +1556,7 @@ def exibir_historicos_dashboard():
                 # Botão Excluir
                 if cols[2].button("❌", key=f"del_cons_dash_{i}"):
                     st.session_state.consumo_historico.pop(i)
-                    rebuild_pontos_semana_from_history()  # atualiza extras
+                    rebuild_pontos_semana_from_history()
                     persist_all()
                     st.success("Registro excluído.")
                     st.experimental_rerun()
@@ -1607,6 +1615,7 @@ def exibir_historicos_dashboard():
 # -----------------------------
 if st.session_state.menu == "🏠 Dashboard":
     exibir_historicos_dashboard()
+
 
     # -----------------------------
     # Tendência de Peso (linha)
@@ -2011,6 +2020,7 @@ def calcular_meta_diaria(peso, altura, idade, sexo, objetivo, nivel_atividade):
     pontos = max(28, min(round_points(pontos), 30))
 
     return pontos
+
 
 # -----------------------------
 # ROTAS / PAGES
