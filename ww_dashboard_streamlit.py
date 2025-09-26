@@ -1346,76 +1346,96 @@ if st.session_state.menu == "🏠 Dashboard":
         st.plotly_chart(fig_gauge, use_container_width=True)
 
 # -----------------------------
-# Históricos
-# -----------------------------
-
-# -----------------------------
-# Função para exibir históricos no dashboard
+# FUNÇÃO PARA EXIBIR HISTÓRICOS NO DASHBOARD
 # -----------------------------
 def exibir_historicos_dashboard():
     col_hist1, col_hist2, col_hist3 = st.columns(3)
+    historico = st.session_state.get("historico_acumulado", [])
 
-    # Pontos Semanais
+    def parse_date(d):
+        if isinstance(d, datetime.date):
+            return d
+        try:
+            return datetime.date.fromisoformat(str(d))
+        except:
+            return None
+
+    hoje = datetime.date.today()
+    semana_atual = hoje.isocalendar()[1]
+    ano_atual = hoje.isocalendar()[0]
+
+    def mesma_semana(dt):
+        if not dt:
+            return False
+        iso = dt.isocalendar()
+        return iso[0] == ano_atual and iso[1] == semana_atual
+
+    # -----------------------------
+    # Pontos / Consumo Diário
+    # -----------------------------
     with col_hist1:
-        st.markdown("### 📊 Pontos Semanais")
-        all_pontos = []
-        for semana in st.session_state.pontos_semana:
-            for reg in semana.get("pontos", []):
-                dia = reg.get("data")
-                if isinstance(dia, str):
-                    try:
-                        reg["data"] = datetime.date.fromisoformat(dia)
-                    except:
-                        reg["data"] = datetime.date.today()
-                all_pontos.append(reg)
-        if all_pontos:
-            for reg in sorted(all_pontos, key=lambda x: x["data"]):
-                dia = reg["data"]
-                dia_str = dia.strftime("%d/%m/%Y") if isinstance(dia, datetime.date) else str(dia)
-                dia_sem = weekday_name_br(dia) if isinstance(dia, datetime.date) else ""
-                usados_txt = f" - usou extras: ({reg.get('usou_extras',0.0):.2f} pts)" if reg.get("usou_extras",0.0) else ""
+        st.markdown("### 📊 Pontos / Consumo Diário")
+
+        consumos = [r for r in historico if r["tipo"] == "consumo"]
+        consumos = [r for r in consumos if parse_date(r["data"]) == hoje]
+
+        if consumos:
+            for reg in sorted(consumos, key=lambda x: parse_date(x["data"])):
+                dia = parse_date(reg["data"])
+                dia_str = dia.strftime("%d/%m/%Y") if dia else str(reg["data"])
+                dia_sem = weekday_name_br(dia) if dia else ""
                 st.markdown(
                     f"<div style='padding:10px; border:1px solid #f39c12; border-radius:5px; margin-bottom:5px;'>"
-                    f"{dia_str} ({dia_sem}): {reg['nome']} {reg['quantidade']:.2f} g <span style='color:#1f3c88'>({reg['pontos']:.2f} pts)</span>{usados_txt}"
+                    f"{dia_str} ({dia_sem}): {reg['nome']} {reg.get('quantidade',0):.2f} g "
+                    f"<span style='color:#1f3c88'>({reg.get('pontos',0):.2f} pts)</span>"
                     f"</div>", unsafe_allow_html=True
                 )
         else:
-            st.write(" - (sem registros)")
+            st.write(" - (sem registros hoje)")
 
+    # -----------------------------
     # Histórico de Atividades
+    # -----------------------------
     with col_hist2:
         st.markdown("### 🏃 Histórico de Atividades Físicas")
-        acts_list = [(d, a.get('tipo'), a.get('minutos',0), a.get('pontos',0)) 
-                     for d,lst in st.session_state.get("activities", {}).items() for a in lst]
-        if acts_list:
-            for d, tipo, minutos, pontos in sorted(acts_list, key=lambda x: x[0]):
-                d_str = d.strftime("%d/%m/%Y") if isinstance(d, datetime.date) else str(d)
-                dia_sem = weekday_name_br(d) if isinstance(d, datetime.date) else ""
+        acts = [r for r in historico if r["tipo"] == "atividade"]
+        acts = [r for r in acts if mesma_semana(parse_date(r["data"]))]
+
+        if acts:
+            for reg in sorted(acts, key=lambda x: parse_date(x["data"])):
+                dia = parse_date(reg["data"])
+                dia_str = dia.strftime("%d/%m/%Y") if dia else str(reg["data"])
+                dia_sem = weekday_name_br(dia) if dia else ""
                 st.markdown(
                     f"<div style='padding:10px; border:1px solid #1abc9c; border-radius:5px; margin-bottom:5px;'>"
-                    f"{d_str} ({dia_sem}): {tipo} - {minutos:.2f} min <span style='color:#1f3c88'>({pontos:.2f} pts)</span>"
+                    f"{dia_str} ({dia_sem}): {reg['tipo_atividade']} - {reg.get('minutos',0):.2f} min "
+                    f"<span style='color:#1f3c88'>({reg.get('pontos',0):.2f} pts)</span>"
                     f"</div>", unsafe_allow_html=True
                 )
         else:
-            st.info("Nenhuma atividade registrada ainda.")
+            st.info("Nenhuma atividade registrada nesta semana.")
 
+    # -----------------------------
     # Histórico de Peso
+    # -----------------------------
     with col_hist3:
         st.markdown("### ⚖️ Histórico de Peso")
-        for i, (p, d) in enumerate(zip(st.session_state.peso, st.session_state.datas_peso)):
-            if i == 0:
-                tendencia = "➖"
-            else:
-                if p < st.session_state.peso[i-1]:
+        pesos = [r for r in historico if r["tipo"] == "peso"]
+        pesos = [r for r in pesos if mesma_semana(parse_date(r["data"]))]
+
+        for i, reg in enumerate(pesos):
+            dia = parse_date(reg["data"])
+            tendencia = "➖"
+            if i > 0:
+                if reg["valor"] < pesos[i-1]["valor"]:
                     tendencia = "⬇️"
-                elif p > st.session_state.peso[i-1]:
+                elif reg["valor"] > pesos[i-1]["valor"]:
                     tendencia = "⬆️"
-                else:
-                    tendencia = "➖"
-            dia_sem = weekday_name_br(d)
+            dia_str = dia.strftime("%d/%m/%Y") if dia else str(reg["data"])
+            dia_sem = weekday_name_br(dia) if dia else ""
             st.markdown(
                 f"<div style='padding:10px; border:1px solid #3498db; border-radius:5px; margin-bottom:5px;'>"
-                f"{d.strftime('%d/%m/%Y')} ({dia_sem}): {p:.2f} kg {tendencia}</div>",
+                f"{dia_str} ({dia_sem}): {reg['valor']:.2f} kg {tendencia}</div>",
                 unsafe_allow_html=True
             )
 
